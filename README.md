@@ -11,7 +11,13 @@ Taustapalvelu on Supabasessa: Postgres, pg_cron-ajastus ja Edge Functionit.
 | --- | --- |
 | `supabase/migrations/` | Tietokanta: lähteet, mittarilukemat, ajastus |
 | `supabase/functions/_jaettu/wom.ts` | WOM-datan muunto mittareiksi (puhdas funktio) |
+| `supabase/functions/_jaettu/ehp.ts` | XP-taulukko ja tunnit EHP-tahdeista |
+| `supabase/functions/_jaettu/arvonta.ts` | Skillikaistojen kolmen vaihtoehdon arvonta |
+| `supabase/functions/_jaettu/eteneminen.ts` | Tasot, kestot ja max-ennuste |
+| `supabase/functions/_jaettu/palvelu.ts` | Tietokantaa käyttävä logiikka |
 | `supabase/functions/hae-wom/` | Tunnin välein ajettava WOM-haku |
+| `supabase/functions/api/` | Käyttöliittymän rajapinta (vaatii kirjautumisen) |
+| `web/` | Käyttöliittymä, julkaistaan GitHub Pagesiin |
 | `testit/` | Deno-testit; tietokantatestit ajetaan PGlitellä |
 
 Testit: `deno task testit`
@@ -46,5 +52,11 @@ Ajastus lukee osoitteen ja avaimen Vaultista. Aja kerran SQL-editorissa:
 select vault.create_secret('https://<ref>.supabase.co', 'projekti_url');
 select vault.create_secret('<sama CRON_AVAIN>', 'cron_avain');
 ```
+
+Rekisteröityminen on suljettu (`enable_signup = false`). Ainoa tunnus
+`zei@osrs-apuri.invalid` luotiin Auth-hallintarajapinnalla; salasana on `.env`-tiedostossa
+(`SIVU_SALASANA`). Osoite ei ole oikea sähköposti, joten sivulla kysytään vain salasanaa.
+
+Sivun voi ajaa paikallisesti: `cd web && python3 -m http.server 8000`.
 
 Ilmaisen tason projekti pysähtyy noin viikon käyttämättömyyden jälkeen.

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="fi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>OSRS-apuri</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23c9a253'/%3E%3Cpath d='M9 22 16 8l7 14z' fill='%231b1712'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="tyyli.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <main id="kirjautuminen" class="kirjautuminen" hidden>
+    <form id="kirjaudu" class="kortti kirjaudu">
+      <h1>OSRS-apuri</h1>
+      <p class="hiljainen">Max cape ja endgame, haaste kerrallaan.</p>
+      <input type="email" name="username" autocomplete="username" hidden>
+      <label>Salasana
+        <input id="salasana" type="password" autocomplete="current-password" required>
+      </label>
+      <button type="submit">Kirjaudu</button>
+      <p id="kirjautumisvirhe" class="virhe" role="alert"></p>
+    </form>
+  </main>
+
+  <div id="sovellus" hidden>
+    <header class="ylapalkki">
+      <div class="brandi">
+        <span class="merkki" aria-hidden="true"></span>
+        <div>
+          <h1>OSRS-apuri</h1>
+          <p class="hiljainen" id="tilinimi">zei_kill</p>
+        </div>
+      </div>
+      <div class="toiminnot">
+        <button id="paivita" class="toissijainen">Päivitä nyt</button>
+        <button id="ulos" class="haamu">Kirjaudu ulos</button>
+      </div>
+    </header>
+
+    <section class="luvut" id="luvut" aria-label="Tilanne"></section>
+
+    <section>
+      <h2>Kaistat</h2>
+      <div class="kaistat" id="kaistat"></div>
+    </section>
+
+    <section>
+      <div class="osion-otsikko">
+        <h2>Skillit</h2>
+        <p class="hiljainen">Tehokkaat tunnit 99:ään, raskain ensin</p>
+      </div>
+      <div class="skillit" id="skillit"></div>
+    </section>
+
+    <section id="valmiit-osio" hidden>
+      <h2>Viimeksi valmistuneet</h2>
+      <ul class="valmiit" id="valmiit"></ul>
+    </section>
+
+    <footer class="lahteet" id="lahteet"></footer>
+  </div>
+
+  <div id="ilmoitus" class="ilmoitus" role="status" hidden></div>
+</body>
+</html>

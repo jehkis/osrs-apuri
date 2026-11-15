@@ -1,0 +1,32 @@
+# Julkaisee web/-kansion GitHub Pagesiin jokaisella pushilla mainiin.
+name: Sivu
+
+on:
+  push:
+    branches: [main]
+    paths: ["web/**", ".github/workflows/sivu.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  julkaise:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.julkaisu.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - id: julkaisu
+        uses: actions/deploy-pages@v4
