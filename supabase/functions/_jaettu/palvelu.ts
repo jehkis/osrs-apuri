@@ -10,10 +10,16 @@ import {
   arvoPalkinnot, avauskynnykset, ennuste, kesto, type Palkinto, PALKINNOT, pelipaiva, pelipaivanLoppu, taso, TASOVALI,
 } from "./eteneminen.ts";
 import { type WomPelaaja, womAika, womMittareiksi } from "./wom.ts";
+import { bossitTaskeista, type WikiTaski } from "./bossit.ts";
+import { arvoTauko, opettelupolku, osaamistaso, type TaukoBossi, type TaukoTaski, vaatimusTaytetty } from "./tauko.ts";
+import { type WikiSyncPelaaja, wikiSyncMittareiksi } from "./wikisync.ts";
 
 const WOM = "https://api.wiseoldman.net/v2";
 const OTSAKKEET = { "User-Agent": "osrs-apuri", "Content-Type": "application/json" };
-const KAISTAT: KaistaId[] = ["skilli1", "skilli2"];
+const KAISTAT: KaistaId[] = ["skilli1", "skilli2", "tauko"];
+const WIKI = "https://oldschool.runescape.wiki/api.php";
+const WIKISYNC = "https://sync.runescape.wiki/runelite/player";
+const PAIVA = 86_400_000;
 
 function tarkista<T>(r: { data: T; error: { message: string } | null }, mita: string): NonNullable<T> {
   if (r.error) throw new Error(`${mita}: ${r.error.message}`);
@@ -47,25 +53,77 @@ async function paivitaTahdit(db: SupabaseClient): Promise<void> {
   onnistui(await db.from("ehp_tahti").upsert(rivit), "ehp_tahti");
 }
 
-// Hakee WOM-datan, päivittää tahdit kerran päivässä ja tarkistaa haasteet.
+async function vanhentunut(db: SupabaseClient, taulu: string, ika: number): Promise<boolean> {
+  const r = tarkista(await db.from(taulu).select("paivitetty").order("paivitetty").limit(1), taulu);
+  return r.length === 0 || Date.now() - Date.parse(r[0].paivitetty) > ika;
+}
+
+// EHB-tahdit: montako killiä tunnissa tehokkaalla tahdilla.
+async function paivitaEhbTahdit(db: SupabaseClient): Promise<void> {
+  const v = await fetch(`${WOM}/efficiency/rates?metric=ehb&type=main`, { headers: OTSAKKEET });
+  if (!v.ok) throw new Error(`WOM-EHB-tahdit: ${v.status}`);
+  const tahdit: { boss: string; rate: number }[] = await v.json();
+  const nyt = new Date().toISOString();
+  onnistui(
+    await db.from("ehb_tahti").upsert(tahdit.map((t) => ({ bossi: t.boss, tapot_tunnissa: t.rate, paivitetty: nyt }))),
+    "ehb_tahti",
+  );
+}
+
+// Bossit ja CA-taskit wikistä. Bossin tunniste on WOM:n KC-mittari, joten
+// mukaan tulevat vain bossit, joiden KC on hiscoreissa.
+async function paivitaBossit(db: SupabaseClient, arvot: Map<string, number>): Promise<void> {
+  const kysely = "bucket('combat_achievement').select('id','name','monster','tier','type','task').limit(5000).run()";
+  const v = await fetch(`${WIKI}?action=bucket&format=json&query=${encodeURIComponent(kysely)}`, { headers: OTSAKKEET });
+  if (!v.ok) throw new Error(`wiki: ${v.status}`);
+  const wiki: WikiTaski[] = (await v.json()).bucket ?? [];
+  if (wiki.length < 100) throw new Error(`wiki palautti vain ${wiki.length} CA-taskia`);
+  const womAvaimet = [...arvot.keys()].filter((m) => m.startsWith("kc:")).map((m) => m.slice(3));
+  const { bossit, taskit } = bossitTaskeista(wiki, womAvaimet);
+  const nyt = new Date().toISOString();
+  onnistui(await db.from("bossi").upsert(bossit.map((b) => ({ ...b, paivitetty: nyt }))), "bossi");
+  onnistui(await db.from("ca_taski").upsert(taskit), "ca_taski");
+}
+
+async function paivitaWikiSync(db: SupabaseClient, rsn: string): Promise<number> {
+  try {
+    const v = await fetch(`${WIKISYNC}/${encodeURIComponent(rsn)}/STANDARD`, { headers: OTSAKKEET });
+    if (!v.ok) throw new Error(`WikiSync vastasi ${v.status}`);
+    const d: WikiSyncPelaaja = await v.json();
+    return Number(tarkista(
+      await db.rpc("kirjaa_lukemat", { p_lahde: "wikisync", p_aika: d.timestamp, lukemat: wikiSyncMittareiksi(d) }),
+      "kirjaa_lukemat",
+    ));
+  } catch (e) {
+    await db.rpc("kirjaa_virhe", { p_lahde: "wikisync", p_viesti: e instanceof Error ? e.message : String(e) });
+    return 0;
+  }
+}
+
+// Hakee WOM- ja WikiSync-datan, päivittää tahdit ja bossit kerran päivässä ja tarkistaa haasteet.
+// WOM on pakollinen; WikiSyncin tai wikin virhe kirjataan, mutta haku jatkuu.
 export async function paivitaWom(db: SupabaseClient, rsn: string) {
+  let kirjattu: number;
   try {
     const pelaaja = await haePelaaja(rsn);
-    const kirjattu = tarkista(
+    kirjattu = Number(tarkista(
       await db.rpc("kirjaa_lukemat", { p_lahde: "wom", p_aika: womAika(pelaaja), lukemat: womMittareiksi(pelaaja) }),
       "kirjaa_lukemat",
-    );
-    const vanhin = tarkista(await db.from("ehp_tahti").select("paivitetty").order("paivitetty").limit(1), "ehp_tahti");
-    if (vanhin.length === 0 || Date.now() - Date.parse(vanhin[0].paivitetty) > 86_400_000) {
-      await paivitaTahdit(db);
-    }
-    const valmistuneet = await tarkistaHaasteet(db);
-    return { kirjattu, valmistuneet };
+    ));
+    if (await vanhentunut(db, "ehp_tahti", PAIVA)) await paivitaTahdit(db);
   } catch (e) {
-    const viesti = e instanceof Error ? e.message : String(e);
-    await db.rpc("kirjaa_virhe", { p_lahde: "wom", p_viesti: viesti });
+    await db.rpc("kirjaa_virhe", { p_lahde: "wom", p_viesti: e instanceof Error ? e.message : String(e) });
     throw e;
   }
+  kirjattu += await paivitaWikiSync(db, rsn);
+  try {
+    if (await vanhentunut(db, "ehb_tahti", PAIVA)) await paivitaEhbTahdit(db);
+    if (await vanhentunut(db, "bossi", PAIVA)) await paivitaBossit(db, await nykyarvot(db));
+  } catch (e) {
+    console.error("bossidata:", e);
+  }
+  const valmistuneet = await tarkistaHaasteet(db);
+  return { kirjattu, valmistuneet };
 }
 
 // ---------------------------------------------------------------- lukeminen
@@ -87,12 +145,49 @@ async function skillit(db: SupabaseClient, arvot: Map<string, number>): Promise<
   return tulos;
 }
 
+// Taukokaistan lähtötiedot: bossit KC:ineen ja vaatimuksineen sekä CA-taskit.
+async function taukoData(db: SupabaseClient, arvot: Map<string, number>) {
+  const rivit = tarkista(
+    await db.from("bossi").select("id, nimi, porras, vaikeus, opeteltava, vaatimus"),
+    "bossi",
+  );
+  const slayer = tasoXp(arvot.get("xp:slayer") ?? 0);
+  const questit: Record<string, number> = {};
+  for (const [m, v] of arvot) if (m.startsWith("quest:")) questit[m.slice(6)] = v;
+
+  const bossit: TaukoBossi[] = rivit.map((b: Omit<TaukoBossi, "kc" | "vaatimusOk">) => ({
+    ...b,
+    kc: Math.max(0, arvot.get(`kc:${b.id}`) ?? 0),
+    vaatimusOk: vaatimusTaytetty(b.vaatimus, slayer, questit),
+  }));
+  const taskit: TaukoTaski[] = rivit.length === 0 ? [] : tarkista(
+    await db.from("ca_taski").select("id, nimi, bossi, tier, tyyppi, kuvaus"),
+    "ca_taski",
+  ).map((t: Omit<TaukoTaski, "tehty">) => ({ ...t, tehty: arvot.get(`ca:${t.id}`) === 1 }));
+  return { bossit, taskit, slayer };
+}
+
+// Puuttuva Slayer-taso opettelupolun kärjessä painottaa Slayeria pääskilli 2 -kaistalla.
+function slayerEste(bossit: TaukoBossi[], slayer: number): boolean {
+  return opettelupolku(bossit).slice(0, 6).some((b) => !b.vaatimusOk && (b.vaatimus?.slayer ?? 0) > slayer);
+}
+
+function vaatimusTeksti(b: TaukoBossi): string | null {
+  if (b.vaatimusOk || !b.vaatimus) return null;
+  return b.vaatimus.slayer ? `Vaatii Slayer ${b.vaatimus.slayer}` : `Vaatii questin ${b.vaatimus.quest}`;
+}
+
 async function kertyneetPisteet(db: SupabaseClient): Promise<number> {
   const rivit = tarkista(await db.from("pistetapahtuma").select("pisteet"), "pistetapahtuma");
   return rivit.reduce((s: number, r: { pisteet: number }) => s + r.pisteet, 0);
 }
 
 // ---------------------------------------------------------------- arvonta ja tarkistus
+
+async function ehbTahdit(db: SupabaseClient): Promise<Record<string, number>> {
+  const r = tarkista(await db.from("ehb_tahti").select("bossi, tapot_tunnissa"), "ehb_tahti");
+  return Object.fromEntries(r.map((x: { bossi: string; tapot_tunnissa: string }) => [x.bossi, Number(x.tapot_tunnissa)]));
+}
 
 export async function varmistaKolmikot(db: SupabaseClient): Promise<void> {
   const arvot = await nykyarvot(db);
@@ -104,21 +199,39 @@ export async function varmistaKolmikot(db: SupabaseClient): Promise<void> {
     "haaste",
   );
   const t = taso(await kertyneetPisteet(db));
+  const tauko = await taukoData(db, arvot);
 
   for (const kaista of KAISTAT) {
     if (haasteet.some((h: { kaista: string }) => h.kaista === kaista)) continue;
+    if (kaista === "tauko" && tauko.bossit.length === 0) continue; // bossidataa ei vielä haettu
 
     const painot = tarkista(await db.from("arvontapaino").select("kohde, lisa").eq("kaista", kaista), "arvontapaino");
+    const lisapainot: Record<string, number> = Object.fromEntries(
+      painot.map((p: { kohde: string; lisa: string }) => [p.kohde, Number(p.lisa)]),
+    );
+    if (kaista === "skilli2" && slayerEste(tauko.bossit, tauko.slayer)) {
+      lisapainot.slayer = (lisapainot.slayer ?? 0) + 1.5;
+    }
     const siemen = Math.floor(Math.random() * 2 ** 31);
-    const ehdotukset = arvoKolmikko({
-      kaista,
-      skillit: kaikki,
-      kesto: kesto(t),
-      lisapainot: Object.fromEntries(painot.map((p: { kohde: string; lisa: string }) => [p.kohde, Number(p.lisa)])),
-      // Sama skilli ei ole kahdella kaistalla yhtä aikaa.
-      pois: haasteet.filter((h: { kaista: string }) => h.kaista !== kaista).map((h: { kohde: string }) => h.kohde),
-      siemen,
-    });
+    const ehdotukset = kaista === "tauko"
+      ? arvoTauko({
+        bossit: tauko.bossit,
+        taskit: tauko.taskit,
+        tapotTunnissa: await ehbTahdit(db),
+        taso: t,
+        kesto: kesto(t),
+        lisapainot,
+        siemen,
+      })
+      : arvoKolmikko({
+        kaista,
+        skillit: kaikki,
+        kesto: kesto(t),
+        lisapainot,
+        // Sama skilli ei ole kahdella kaistalla yhtä aikaa.
+        pois: haasteet.filter((h: { kaista: string }) => h.kaista !== kaista).map((h: { kohde: string }) => h.kohde),
+        siemen,
+      });
     if (ehdotukset.length === 0) continue;
 
     const arvonta = tarkista(
@@ -260,7 +373,8 @@ export async function tarkistaHaasteet(db: SupabaseClient): Promise<number> {
 
 export async function valitse(db: SupabaseClient, haasteId: number): Promise<void> {
   const h = tarkista(await db.from("haaste").select("mittari").eq("id", haasteId).single(), "haaste");
-  const nyt = (await nykyarvot(db)).get(h.mittari);
+  // Tekemättömällä CA-taskilla tai tappamattomalla bossilla ei ole lukemaa: arvo on 0.
+  const nyt = (await nykyarvot(db)).get(h.mittari) ?? (/^(ca|kc):/.test(h.mittari) ? 0 : undefined);
   if (nyt === undefined) throw new Error(`mittarille ${h.mittari} ei ole lukemaa`);
   onnistui(await db.rpc("valitse_haaste", { p_haaste: haasteId, p_nyt: nyt }), "valitse_haaste");
 }
@@ -269,19 +383,33 @@ export async function valitse(db: SupabaseClient, haasteId: number): Promise<voi
 
 interface HaasteRivi {
   kohde: string;
+  mittari: string;
+  kuvaus: string;
   ulottuvuus: string;
   alkuarvo: string | number;
   tavoite: string | number;
   tavoitetaso: number | null;
 }
 
-// Kortin otsikko ja tehtävä valmiina, ettei käyttöliittymän tarvitse jäsentää kuvausta.
-function korttiin<T extends HaasteRivi>(h: T) {
-  const otsikko = skillinNimi(h.kohde);
-  const tehtava = h.tavoitetaso
-    ? `${tasoXp(Number(h.alkuarvo))} → ${h.tavoitetaso}`
-    : `+${Number(h.tavoite).toLocaleString("fi-FI").replace(/\u00a0/g, " ")} XP`;
-  return { ...h, otsikko, tehtava };
+const wikiSivu = (nimi: string, alasivu = "") =>
+  `https://oldschool.runescape.wiki/w/${encodeURIComponent(nimi.replace(/ /g, "_"))}${alasivu}`;
+
+// Kortin otsikko, tehtävä ja yksikkö valmiina, ettei käyttöliittymän tarvitse jäsentää kuvausta.
+function korttiin<T extends HaasteRivi>(h: T, bossinimet: Map<string, string>) {
+  if (h.mittari.startsWith("xp:")) {
+    const tehtava = h.tavoitetaso
+      ? `${tasoXp(Number(h.alkuarvo))} → ${h.tavoitetaso}`
+      : `+${Number(h.tavoite).toLocaleString("fi-FI").replace(/\u00a0/g, " ")} XP`;
+    return { ...h, otsikko: skillinNimi(h.kohde), tehtava, yksikko: "XP", linkki: null };
+  }
+  const nimi = bossinimet.get(h.kohde) ?? h.kohde;
+  return {
+    ...h,
+    otsikko: nimi,
+    tehtava: h.kuvaus,
+    yksikko: h.mittari.startsWith("ca:") ? "taski" : "killiä",
+    linkki: h.ulottuvuus === "opettelu" ? wikiSivu(nimi, "/Strategies") : wikiSivu(nimi),
+  };
 }
 
 export async function tilanne(db: SupabaseClient) {
@@ -297,18 +425,24 @@ export async function tilanne(db: SupabaseClient) {
   const ttm = arvot.get("tili:ttm") ?? null;
 
   const lahteet = tarkista(await db.from("lahde").select("id, kuvaus, paivitetty, virhe").order("id"), "lahde");
+  const tauko = await taukoData(db, arvot);
+  const bossinimet = new Map(tauko.bossit.map((b) => [b.id, b.nimi]));
   const kaistat = tarkista(await db.from("kaista").select("id, nimi").order("jarjestys"), "kaista");
   const haasteet = tarkista(
     await db.from("haaste")
       .select("id, kaista, kohde, ulottuvuus, mittari, alkuarvo, tavoite, tavoitetaso, tunnit, pisteet, kuvaus, tila")
       .in("tila", ["aktiivinen", "tarjolla"]).order("id"),
     "haaste",
-  ).map(korttiin);
+  ).map((h: HaasteRivi & { kaista: string; tila: string; [k: string]: unknown }) => korttiin(h, bossinimet));
   const valmiit = tarkista(
-    await db.from("haaste").select("id, kaista, kuvaus, pisteet, valmistui").eq("tila", "valmis")
+    await db.from("haaste").select("id, kaista, kohde, mittari, kuvaus, pisteet, valmistui").eq("tila", "valmis")
       .order("valmistui", { ascending: false }).limit(10),
     "haaste",
-  );
+  ).map((v: { kohde: string; mittari: string; kuvaus: string }) => ({
+    ...v,
+    // Taukohaasteen kuvauksessa ei ole bossin nimeä.
+    kuvaus: v.mittari.startsWith("xp:") ? v.kuvaus : `${bossinimet.get(v.kohde) ?? v.kohde}: ${v.kuvaus}`,
+  }));
 
   const t = taso(kertyneet);
   const kynnykset = avauskynnykset(kertyneet);
@@ -363,6 +497,13 @@ export async function tilanne(db: SupabaseClient) {
         tarjolla: omat.filter((h: { tila: string }) => h.tila === "tarjolla"),
       };
     }),
+    opettelu: {
+      osaamistaso: osaamistaso(tauko.bossit),
+      polku: opettelupolku(tauko.bossit).slice(0, 10).map((b) => ({
+        id: b.id, nimi: b.nimi, porras: b.porras, kc: b.kc, este: vaatimusTeksti(b), linkki: wikiSivu(b.nimi, "/Strategies"),
+      })),
+      caTehty: arvot.get("tili:ca_tehty") ?? null,
+    },
     valmiit,
     lahteet,
   };

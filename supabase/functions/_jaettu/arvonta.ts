@@ -2,8 +2,10 @@
 
 import { type Menetelma, tasoXp, tunnit, xpTasolle, xpTunneista, XP_99 } from "./ehp.ts";
 
-export type KaistaId = "skilli1" | "skilli2";
-export type Ulottuvuus = "tunnit" | "tasotavoite" | "heikoin";
+export type KaistaId = "skilli1" | "skilli2" | "tauko";
+export type Ulottuvuus =
+  | "tunnit" | "tasotavoite" | "heikoin" // skillikaistat
+  | "opettelu" | "maara" | "nopeus" | "rajoitus" | "putki"; // taukokaista
 
 export interface Skilli {
   nimi: string;
@@ -24,7 +26,7 @@ export interface Ehdotus {
 }
 
 export interface ArvontaSyote {
-  kaista: KaistaId;
+  kaista: "skilli1" | "skilli2";
   skillit: Skilli[];
   kesto: [number, number]; // minuutteina, tason mukaan
   lisapainot: Record<string, number>; // aiemmin ohitetut kohteet saavat lisää painoa
@@ -50,7 +52,7 @@ export function satunnainen(siemen: number): () => number {
   };
 }
 
-function painotettu<T>(r: () => number, kohteet: T[], paino: (x: T) => number): T | undefined {
+export function painotettu<T>(r: () => number, kohteet: T[], paino: (x: T) => number): T | undefined {
   const painot = kohteet.map(paino);
   const summa = painot.reduce((s, p) => s + p, 0);
   if (summa <= 0) return undefined;

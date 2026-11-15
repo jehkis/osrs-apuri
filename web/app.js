@@ -121,7 +121,7 @@ function kaistanToiminnot(k) {
 
   const osat = [vaihto, el("span", { class: "vali" })];
   const jokereita = tila.palkinnot.varasto.jokeri;
-  if (jokereita > 0) {
+  if (jokereita > 0 && k.id !== "tauko") {
     const muut = new Set(tila.kaistat.filter((x) => x.id !== k.id && x.aktiivinen).map((x) => x.aktiivinen.kohde));
     const valinta = el("select", { "aria-label": "Jokerin skilli" },
       tila.skillit.filter((s) => s.tunnit99 > 0 && s.nimi !== "farming" && !muut.has(s.nimi))
@@ -134,6 +134,22 @@ function kaistanToiminnot(k) {
   return el("div", { class: "kaistan-toiminnot" }, osat);
 }
 
+const ULOTTUVUUS = {
+  opettelu: "Opettelu", maara: "Määrä", nopeus: "Nopeus", rajoitus: "Rajoitus", putki: "Putki",
+};
+
+function tehtavaTeksti(h) {
+  if (h.ulottuvuus === "heikoin") return `Heikoin lenkki: ${h.tehtava}`;
+  return h.tehtava;
+}
+
+// Bossin nimi linkkinä wikiin: opettelussa strategiasivulle.
+function otsikkoLinkki(h, luokka) {
+  return h.linkki
+    ? el("a", { class: `${luokka} linkki`, href: h.linkki, target: "_blank", rel: "noopener" }, h.otsikko)
+    : el("div", { class: luokka }, h.otsikko);
+}
+
 function piirraKaista(k) {
   const otsikko = el("div", { class: "kaista-otsikko" }, el("h3", {}, k.nimi));
 
@@ -142,13 +158,19 @@ function piirraKaista(k) {
     const tehty = Math.min(a.edistyminen, Number(a.tavoite));
     const osuus = tehty / Number(a.tavoite);
     otsikko.append(el("span", { class: "merkinta kulta" }, `+${a.pisteet} p`));
+    const edistys = a.yksikko === "taski"
+      ? (osuus >= 1 ? "Tehty" : "Ei vielä tehty (näkyy, kun WikiSync päivittyy)")
+      : `${luku(tehty)} / ${luku(Number(a.tavoite))} ${a.yksikko}`;
+    const arvio = Number(a.tunnit) > 0 ? ` · arvio ${tunnit(Number(a.tunnit))}` : "";
     return el("article", { class: "kortti kaista" }, otsikko,
       el("div", { class: "aktiivinen" },
-        el("div", { class: "kuvaus" }, `${a.otsikko} ${a.tehtava}`),
+        a.yksikko === "XP"
+          ? el("div", { class: "kuvaus" }, `${a.otsikko} ${a.tehtava}`)
+          : el("div", {}, otsikkoLinkki(a, "kuvaus"), el("div", { class: "tehtava" }, a.tehtava)),
         palkki(osuus, osuus >= 1 ? "valmis" : ""),
         el("div", { class: "rivi" },
-          el("span", {}, `${luku(tehty)} / ${luku(Number(a.tavoite))} XP`),
-          el("span", {}, `${luku(osuus * 100)} % · arvio ${tunnit(Number(a.tunnit))}`))));
+          el("span", {}, edistys),
+          el("span", {}, `${luku(osuus * 100)} %${arvio}`))));
   }
 
   if (k.tarjolla.length === 0) {
@@ -161,10 +183,11 @@ function piirraKaista(k) {
     el("div", { class: "valinta" }, k.tarjolla.map((h) => {
       return el("div", { class: "vaihtoehto" },
         el("div", {},
-          el("div", { class: "kohde" }, h.otsikko),
-          el("div", { class: "tehtava" }, h.ulottuvuus === "heikoin" ? `Heikoin lenkki: ${h.tehtava}` : h.tehtava)),
+          otsikkoLinkki(h, "kohde"),
+          el("div", { class: "tehtava" }, tehtavaTeksti(h))),
         el("div", { class: "tiedot" },
-          el("span", { class: "merkinta" }, tunnit(Number(h.tunnit))),
+          ULOTTUVUUS[h.ulottuvuus] ? el("span", { class: "merkinta" }, ULOTTUVUUS[h.ulottuvuus]) : null,
+          Number(h.tunnit) > 0 ? el("span", { class: "merkinta" }, tunnit(Number(h.tunnit))) : null,
           el("span", { class: "merkinta kulta" }, `+${h.pisteet} p`)),
         el("button", { onclick: (ev) => valitse(h.id, ev.currentTarget) }, "Valitse"));
     })),
@@ -228,10 +251,25 @@ function piirraSkillit(t) {
   }));
 }
 
+function piirraOpettelu(t) {
+  const o = t.opettelu;
+  $("opettelu-osio").hidden = o.polku.length === 0;
+  $("opettelu-lisa").textContent =
+    `Osaamistaso ${o.osaamistaso}/5${o.caTehty != null ? ` · ${luku(o.caTehty)} CA-taskia tehty` : ""}`;
+  $("polku").replaceChildren(...o.polku.map((b, i) =>
+    el("li", { class: `kortti polku-rivi${b.este ? " lukittu" : ""}` },
+      el("span", { class: "jarjestys" }, String(i + 1)),
+      el("div", { class: "polku-nimi" },
+        el("a", { class: "linkki", href: b.linkki, target: "_blank", rel: "noopener" }, b.nimi),
+        el("div", { class: "lisa" }, b.este ?? (b.kc === 0 ? "Ei vielä killejä" : `${b.kc} / 10 KC`))),
+      el("span", { class: "merkinta" }, `Porras ${b.porras}`))));
+}
+
 function piirra(t) {
   tila = t;
   piirraLuvut(t);
   piirraPalkinnot(t);
+  piirraOpettelu(t);
   $("kaistat").replaceChildren(...t.kaistat.map(piirraKaista));
   piirraSkillit(t);
 
