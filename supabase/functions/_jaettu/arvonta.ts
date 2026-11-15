@@ -169,3 +169,11 @@ export function arvoKolmikko(syote: ArvontaSyote): Ehdotus[] {
   }
   return tulos;
 }
+
+// Jokeri: käyttäjän valitsema skilli tason keskikestolla.
+export function jokeriHaaste(s: Skilli, kesto: [number, number]): Ehdotus | null {
+  const t = tilanne(s);
+  if (!t || EI_ARVONTAAN.includes(s.nimi)) return null;
+  const keski = Math.round((kesto[0] + kesto[1]) / 2 / 5) * 5;
+  return tunnitHaaste(t, keski);
+}

@@ -3,8 +3,12 @@
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.45.4";
 import { type Menetelma, tasoXp } from "./ehp.ts";
-import { arvoKolmikko, type KaistaId, type Skilli, skillinNimi, tilanne as skillinTilanne } from "./arvonta.ts";
-import { ennuste, kesto, taso, TASOVALI } from "./eteneminen.ts";
+import {
+  arvoKolmikko, jokeriHaaste, type KaistaId, type Skilli, skillinNimi, tilanne as skillinTilanne,
+} from "./arvonta.ts";
+import {
+  arvoPalkinnot, avauskynnykset, ennuste, kesto, type Palkinto, PALKINNOT, pelipaiva, pelipaivanLoppu, taso, TASOVALI,
+} from "./eteneminen.ts";
 import { type WomPelaaja, womAika, womMittareiksi } from "./wom.ts";
 
 const WOM = "https://api.wiseoldman.net/v2";
@@ -131,6 +135,110 @@ export async function varmistaKolmikot(db: SupabaseClient): Promise<void> {
   }
 }
 
+// ---------------------------------------------------------------- palkinnot
+
+async function saldo(db: SupabaseClient): Promise<number> {
+  return Number(tarkista(await db.rpc("saldo"), "saldo"));
+}
+
+// Luo palkintoarvonnan jokaiselle ylitetylle avauskynnykselle, jolla sitä ei vielä ole.
+export async function varmistaPalkinnot(db: SupabaseClient): Promise<void> {
+  const { saavutetut } = avauskynnykset(await kertyneetPisteet(db));
+  if (saavutetut.length === 0) return;
+  const olemassa = tarkista(await db.from("palkintoarvonta").select("kynnys"), "palkintoarvonta");
+  const on = new Set(olemassa.map((r: { kynnys: number }) => r.kynnys));
+  const uudet = saavutetut.filter((k) => !on.has(k)).map((kynnys) => {
+    const siemen = Math.floor(Math.random() * 2 ** 31);
+    return { kynnys, siemen, vaihtoehdot: arvoPalkinnot(siemen) };
+  });
+  if (uudet.length === 0) return;
+  onnistui(
+    await db.from("palkintoarvonta").upsert(uudet, { onConflict: "kynnys", ignoreDuplicates: true }),
+    "palkintoarvonta",
+  );
+}
+
+// WOM-haku on tunnin välein, joten illan viimeinen bossaus näkyy vasta seuraavassa
+// haussa. Bossi-ilta päättyy siksi vasta tunnin kuluttua pelipäivän vaihtumisesta.
+const BOSSI_ILLAN_JALKIAIKA = 65 * 60_000;
+
+async function hyvitaBossiIllat(db: SupabaseClient): Promise<void> {
+  const illat = tarkista(
+    await db.from("palkinto").select("id, kaytto").eq("tyyppi", "bossi_ilta").not("kaytetty", "is", null),
+    "palkinto",
+  ).filter((p: { kaytto: { paattynyt?: boolean } }) => !p.kaytto?.paattynyt);
+
+  for (const ilta of illat) {
+    const raja = Date.parse(ilta.kaytto.loppu) + BOSSI_ILLAN_JALKIAIKA;
+    const lukema = tarkista(
+      await db.from("mittarilukema").select("arvo").eq("mittari", "tili:ehb")
+        .lte("aika", new Date(raja).toISOString()).order("aika", { ascending: false }).limit(1),
+      "mittarilukema",
+    );
+    if (lukema.length === 0) continue;
+    tarkista(
+      await db.rpc("hyvita_bossi_ilta", {
+        p_palkinto: ilta.id, p_ehb: Number(lukema[0].arvo), p_paattynyt: Date.now() > raja,
+      }),
+      "hyvita_bossi_ilta",
+    );
+  }
+}
+
+export async function valitsePalkinto(db: SupabaseClient, arvonta: number, tyyppi: string): Promise<void> {
+  onnistui(await db.rpc("valitse_palkinto", { p_arvonta: arvonta, p_tyyppi: tyyppi }), "valitse_palkinto");
+}
+
+async function aktiivisetPalkinnot(db: SupabaseClient) {
+  const kaytetyt = tarkista(
+    await db.from("palkinto").select("tyyppi, kaytto").in("tyyppi", ["vapaapaiva", "bossi_ilta"])
+      .not("kaytetty", "is", null).order("kaytetty", { ascending: false }).limit(20),
+    "palkinto",
+  );
+  const tanaan = pelipaiva(new Date());
+  const vapaapaiva = kaytetyt.some((p: { tyyppi: string; kaytto: { paiva?: string } }) =>
+    p.tyyppi === "vapaapaiva" && p.kaytto?.paiva === tanaan
+  );
+  const ilta = kaytetyt.find((p: { tyyppi: string; kaytto: { paattynyt?: boolean } }) =>
+    p.tyyppi === "bossi_ilta" && !p.kaytto?.paattynyt
+  );
+  return {
+    vapaapaiva,
+    bossiIlta: ilta ? { loppu: ilta.kaytto.loppu, pisteet: ilta.kaytto.annettu ?? 0 } : null,
+  };
+}
+
+export async function kaytaPalkinto(db: SupabaseClient, tyyppi: string): Promise<void> {
+  const aktiiviset = await aktiivisetPalkinnot(db);
+  let kaytto: Record<string, unknown>;
+  if (tyyppi === "vapaapaiva") {
+    if (aktiiviset.vapaapaiva) throw new Error("tänään on jo vapaapäivä");
+    kaytto = { paiva: pelipaiva(new Date()) };
+  } else if (tyyppi === "bossi_ilta") {
+    if (aktiiviset.bossiIlta) throw new Error("bossi-ilta on jo käynnissä");
+    const ehb = (await nykyarvot(db)).get("tili:ehb");
+    if (ehb === undefined) throw new Error("EHB-lukemaa ei vielä ole");
+    kaytto = { alku: new Date().toISOString(), loppu: pelipaivanLoppu(new Date()).toISOString(), ehb_alku: ehb, annettu: 0 };
+  } else {
+    throw new Error(`palkintoa ${tyyppi} ei käytetä tällä tavalla`);
+  }
+  tarkista(await db.rpc("kayta_palkinto", { p_tyyppi: tyyppi, p_kaytto: kaytto }), "kayta_palkinto");
+}
+
+export async function vaihda(db: SupabaseClient, kaista: string, ilmainen: boolean): Promise<void> {
+  onnistui(await db.rpc("vaihda_kolmikko", { p_kaista: kaista, p_ilmainen: ilmainen }), "vaihda_kolmikko");
+  await varmistaKolmikot(db);
+}
+
+export async function jokeri(db: SupabaseClient, kaista: string, skilli: string): Promise<void> {
+  const arvot = await nykyarvot(db);
+  const s = (await skillit(db, arvot)).find((x) => x.nimi === skilli);
+  if (!s) throw new Error(`tuntematon skilli ${skilli}`);
+  const e = jokeriHaaste(s, kesto(taso(await kertyneetPisteet(db))));
+  if (!e) throw new Error(`skillille ${skillinNimi(skilli)} ei voi tehdä haastetta`);
+  tarkista(await db.rpc("kayta_jokeri", { p_kaista: kaista, p_haaste: e }), "kayta_jokeri");
+}
+
 export async function tarkistaHaasteet(db: SupabaseClient): Promise<number> {
   const arvot = await nykyarvot(db);
   const aktiiviset = tarkista(
@@ -144,6 +252,8 @@ export async function tarkistaHaasteet(db: SupabaseClient): Promise<number> {
       if (tarkista(await db.rpc("merkitse_valmiiksi", { p_haaste: h.id }), "merkitse_valmiiksi")) valmiita++;
     }
   }
+  await hyvitaBossiIllat(db);
+  await varmistaPalkinnot(db);
   await varmistaKolmikot(db);
   return valmiita;
 }
@@ -201,6 +311,18 @@ export async function tilanne(db: SupabaseClient) {
   );
 
   const t = taso(kertyneet);
+  const kynnykset = avauskynnykset(kertyneet);
+  const odottavat = tarkista(
+    await db.from("palkintoarvonta").select("id, kynnys, vaihtoehdot").is("valittu", null).order("kynnys"),
+    "palkintoarvonta",
+  );
+  const kayttamattomat = tarkista(
+    await db.from("palkinto").select("tyyppi").is("kaytetty", null),
+    "palkinto",
+  );
+  const varasto = Object.fromEntries(PALKINNOT.map((p: Palkinto) => [p, 0])) as Record<Palkinto, number>;
+  for (const p of kayttamattomat) varasto[p.tyyppi as Palkinto]++;
+
   return {
     tili: {
       ttm,
@@ -209,7 +331,16 @@ export async function tilanne(db: SupabaseClient) {
       totalXp: arvot.get("xp:overall") ?? null,
       ennuste: ttm === null ? null : ennuste(historia, ttm, new Date()),
     },
-    pisteet: { kertyneet, taso: t, seuraavaTaso: t < 5 ? t * TASOVALI : null, kesto: kesto(t) },
+    pisteet: {
+      kertyneet,
+      saldo: await saldo(db),
+      taso: t,
+      seuraavaTaso: t < 5 ? t * TASOVALI : null,
+      kesto: kesto(t),
+      seuraavaPalkinto: kynnykset.seuraava,
+      edellinenPalkinto: kynnykset.edellinen,
+    },
+    palkinnot: { odottavat, varasto, ...(await aktiivisetPalkinnot(db)) },
     skillit: kaikki
       .map((s) => ({
         nimi: s.nimi,

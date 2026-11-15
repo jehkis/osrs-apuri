@@ -4,9 +4,15 @@
 //   GET  /api/tilanne          etusivun kaikki tiedot
 //   POST /api/valitse {id}     valitse haaste kolmikosta
 //   POST /api/paivita          hae WOM nyt ja tarkista haasteet
+//   POST /api/vaihda {kaista, ilmainen}       uusi kolmikko (100 p tai ilmainen vaihto)
+//   POST /api/jokeri {kaista, skilli}         valittu skilli suoraan aktiiviseksi
+//   POST /api/palkinto {arvonta, tyyppi}      valitse palkinto avauksesta
+//   POST /api/kayta {tyyppi}                  vapaapäivä tai bossi-ilta käyttöön
 
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
-import { paivitaWom, tilanne, valitse, varmistaKolmikot } from "../_jaettu/palvelu.ts";
+import {
+  jokeri, kaytaPalkinto, paivitaWom, tilanne, vaihda, valitse, valitsePalkinto, varmistaKolmikot, varmistaPalkinnot,
+} from "../_jaettu/palvelu.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -30,6 +36,26 @@ Deno.serve(async (req) => {
   const reitti = new URL(req.url).pathname.replace(/^.*\/api/, "") || "/";
   try {
     if (req.method === "GET" && reitti === "/tilanne") {
+      await varmistaPalkinnot(db);
+      await varmistaKolmikot(db);
+      return vastaa(await tilanne(db));
+    }
+    if (req.method === "POST" && ["/vaihda", "/jokeri", "/palkinto", "/kayta"].includes(reitti)) {
+      const b = await req.json();
+      const kaista = ["skilli1", "skilli2"].includes(b.kaista) ? b.kaista : null;
+      if (reitti === "/vaihda") {
+        if (!kaista) return vastaa({ virhe: "kaista puuttuu" }, 400);
+        await vaihda(db, kaista, b.ilmainen === true);
+      } else if (reitti === "/jokeri") {
+        if (!kaista || typeof b.skilli !== "string") return vastaa({ virhe: "kaista tai skilli puuttuu" }, 400);
+        await jokeri(db, kaista, b.skilli);
+      } else if (reitti === "/palkinto") {
+        if (!Number.isInteger(b.arvonta) || typeof b.tyyppi !== "string") return vastaa({ virhe: "arvonta tai tyyppi puuttuu" }, 400);
+        await valitsePalkinto(db, b.arvonta, b.tyyppi);
+      } else {
+        if (typeof b.tyyppi !== "string") return vastaa({ virhe: "tyyppi puuttuu" }, 400);
+        await kaytaPalkinto(db, b.tyyppi);
+      }
       await varmistaKolmikot(db);
       return vastaa(await tilanne(db));
     }

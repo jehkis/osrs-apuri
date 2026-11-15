@@ -70,3 +70,60 @@ export function ennuste(historia: Lukema[], ttm: number, nyt: Date): Ennuste {
     : null;
   return { viikonTunnit, tahtiViikossa: tahti, maxPaiva, tahdinPohja: paivia };
 }
+
+// ---------------------------------------------------------------- palkinnot
+
+// Avausväli kasvaa tason mukana: 50, 75, 100, 125, 150 pistettä.
+export function avausvali(t: number): number {
+  return 25 + 25 * Math.min(5, Math.max(1, t));
+}
+
+// Kaikki avauskynnykset, jotka kertyneet pisteet ovat ylittäneet, sekä seuraava.
+// Väli määräytyy edellisen kynnyksen kohdan tasosta, joten laskuri jatkuu
+// tasorajan yli eikä mitään nollata.
+export function avauskynnykset(kertyneet: number): { saavutetut: number[]; seuraava: number; edellinen: number } {
+  const saavutetut: number[] = [];
+  let raja = 0;
+  while (true) {
+    const seuraava = raja + avausvali(taso(raja));
+    if (seuraava > kertyneet) return { saavutetut, seuraava, edellinen: raja };
+    saavutetut.push(seuraava);
+    raja = seuraava;
+  }
+}
+
+export const PALKINNOT = ["jokeri", "vapaapaiva", "bossi_ilta", "vaihto"] as const;
+export type Palkinto = typeof PALKINNOT[number];
+
+// Kolme eri palkintoa neljästä, siemenellä toistettavasti.
+export function arvoPalkinnot(siemen: number): Palkinto[] {
+  let a = siemen >>> 0;
+  const r = () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const pakka = [...PALKINNOT];
+  for (let i = pakka.length - 1; i > 0; i--) {
+    const j = Math.floor(r() * (i + 1));
+    [pakka[i], pakka[j]] = [pakka[j], pakka[i]];
+  }
+  return pakka.slice(0, 3);
+}
+
+// Pelipäivä vaihtuu klo 05 Suomen aikaa: ma klo 03 kuuluu vielä sunnuntaihin.
+export function pelipaiva(nyt: Date): string {
+  const viiveella = new Date(nyt.getTime() - 5 * 3_600_000);
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Helsinki" }).format(viiveella);
+}
+
+// Seuraavan pelipäivän alku (klo 05 Suomen aikaa) UTC-hetkenä.
+export function pelipaivanLoppu(nyt: Date): Date {
+  for (let h = 1; h <= 30; h++) {
+    const t = new Date(Math.floor(nyt.getTime() / 3_600_000) * 3_600_000 + h * 3_600_000);
+    if (pelipaiva(t) !== pelipaiva(nyt)) return t;
+  }
+  throw new Error("pelipäivän loppua ei löytynyt");
+}

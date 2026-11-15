@@ -72,7 +72,6 @@ async function kutsu(polku, valinnat = {}) {
 function piirraLuvut(t) {
   const e = t.tili.ennuste;
   const p = t.pisteet;
-  const tasonAlku = (p.taso - 1) * 1500;
   const ennusteArvo = e?.maxPaiva
     ? el("div", { class: "arvo" }, new Date(e.maxPaiva).toLocaleDateString("fi-FI", { month: "short", year: "numeric" }))
     : el("div", { class: "arvo" }, "–");
@@ -93,12 +92,46 @@ function piirraLuvut(t) {
       el("div", { class: "lisa" }, "Maanantaista klo 05")),
     el("div", { class: "kortti luku" },
       el("div", { class: "nimi" }, `Pisteet · taso ${p.taso}`),
-      el("div", { class: "arvo" }, luku(p.kertyneet)),
-      p.seuraavaTaso
-        ? [palkki((p.kertyneet - tasonAlku) / 1500, "ohut"),
-          el("div", { class: "lisa" }, `${luku(p.seuraavaTaso - p.kertyneet)} tasoon ${p.taso + 1}`)]
-        : el("div", { class: "lisa" }, "Ylin taso")),
+      el("div", { class: "arvo" }, luku(p.kertyneet), el("small", {}, `saldo ${luku(p.saldo)}`)),
+      palkki((p.kertyneet - p.edellinenPalkinto) / (p.seuraavaPalkinto - p.edellinenPalkinto), "ohut"),
+      el("div", { class: "lisa" }, `${luku(p.seuraavaPalkinto - p.kertyneet)} p seuraavaan palkintoon` +
+        (p.seuraavaTaso ? ` · ${luku(p.seuraavaTaso - p.kertyneet)} tasoon ${p.taso + 1}` : ""))),
   );
+}
+
+const PALKINTO = {
+  jokeri: { nimi: "Jokeri", selite: "Valitse mikä tahansa skilli kaistalle arvonnan ohi." },
+  vapaapaiva: { nimi: "Vapaapäivä", selite: "Päivä ilman haasteita: tee mitä huvittaa." },
+  bossi_ilta: { nimi: "Bossi-ilta", selite: "Illan bossaus antaa pisteitä kuin skillaus, 10 p EHB-tunnilta." },
+  vaihto: { nimi: "Ilmainen vaihto", selite: "Uusi kolmikko yhdelle kaistalle ilman pistekulua." },
+};
+
+let tila = null; // viimeisin tilanne, kaistan toimintoja varten
+
+function kaistanToiminnot(k) {
+  const p = tila.pisteet;
+  const ilmaisia = tila.palkinnot.varasto.vaihto;
+  const vaihto = el("button", {
+    class: "toissijainen",
+    disabled: ilmaisia === 0 && p.saldo < 100,
+    title: ilmaisia === 0 && p.saldo < 100 ? `Saldo ${p.saldo} / 100` : null,
+    onclick: (ev) => toiminto("/vaihda", { kaista: k.id, ilmainen: ilmaisia > 0 }, ev.currentTarget,
+      ilmaisia > 0 ? "Uusi kolmikko arvottu (ilmainen vaihto)." : "Uusi kolmikko arvottu, −100 p."),
+  }, ilmaisia > 0 ? `Vaihda kolmikko · ilmainen (${ilmaisia})` : "Vaihda kolmikko · 100 p");
+
+  const osat = [vaihto, el("span", { class: "vali" })];
+  const jokereita = tila.palkinnot.varasto.jokeri;
+  if (jokereita > 0) {
+    const muut = new Set(tila.kaistat.filter((x) => x.id !== k.id && x.aktiivinen).map((x) => x.aktiivinen.kohde));
+    const valinta = el("select", { "aria-label": "Jokerin skilli" },
+      tila.skillit.filter((s) => s.tunnit99 > 0 && s.nimi !== "farming" && !muut.has(s.nimi))
+        .map((s) => el("option", { value: s.nimi }, `${s.otsikko} (${s.taso})`)));
+    osat.push(valinta, el("button", {
+      class: "toissijainen",
+      onclick: (ev) => toiminto("/jokeri", { kaista: k.id, skilli: valinta.value }, ev.currentTarget, "Jokeri käytetty."),
+    }, `Käytä jokeri (${jokereita})`));
+  }
+  return el("div", { class: "kaistan-toiminnot" }, osat);
 }
 
 function piirraKaista(k) {
@@ -134,7 +167,52 @@ function piirraKaista(k) {
           el("span", { class: "merkinta" }, tunnit(Number(h.tunnit))),
           el("span", { class: "merkinta kulta" }, `+${h.pisteet} p`)),
         el("button", { onclick: (ev) => valitse(h.id, ev.currentTarget) }, "Valitse"));
-    })));
+    })),
+    kaistanToiminnot(k));
+}
+
+function piirraPalkinnot(t) {
+  const pk = t.palkinnot;
+
+  const ilmoitukset = [];
+  if (pk.vapaapaiva) ilmoitukset.push([el("strong", {}, "Vapaapäivä tänään."), " Tee mitä huvittaa, haasteet odottavat huomiseen."]);
+  if (pk.bossiIlta) {
+    const loppu = new Date(pk.bossiIlta.loppu).toLocaleTimeString("fi-FI", { hour: "2-digit", minute: "2-digit" });
+    ilmoitukset.push([el("strong", {}, "Bossi-ilta käynnissä"), ` klo ${loppu} asti · +${pk.bossiIlta.pisteet} p tähän mennessä.`]);
+  }
+  $("tila-ilmoitus").hidden = ilmoitukset.length === 0;
+  $("tila-ilmoitus").replaceChildren(...ilmoitukset.flatMap((i, n) => (n ? [el("br"), ...i] : i)));
+
+  const odottava = pk.odottavat[0];
+  $("palkinto-osio").hidden = !odottava;
+  if (odottava) {
+    $("palkinto-otsikko").textContent = pk.odottavat.length > 1
+      ? `Palkinto odottaa (${pk.odottavat.length} jonossa)` : `Palkinto odottaa · ${odottava.kynnys} p`;
+    $("palkintovalinta").replaceChildren(...odottava.vaihtoehdot.map((tyyppi) =>
+      el("div", { class: "palkinto" },
+        el("div", {}, el("div", { class: "nimi" }, PALKINTO[tyyppi].nimi), el("div", { class: "selite" }, PALKINTO[tyyppi].selite)),
+        el("button", {
+          onclick: (ev) => toiminto("/palkinto", { arvonta: odottava.id, tyyppi }, ev.currentTarget, `${PALKINTO[tyyppi].nimi} talteen.`),
+        }, "Valitse"))));
+  }
+
+  const rivit = Object.entries(pk.varasto).filter(([, n]) => n > 0).map(([tyyppi, n]) => {
+    let toimi = null;
+    if (tyyppi === "vapaapaiva") {
+      toimi = el("button", { class: "toissijainen", disabled: pk.vapaapaiva,
+        onclick: (ev) => toiminto("/kayta", { tyyppi }, ev.currentTarget, "Vapaapäivä alkoi.") }, "Käytä tänään");
+    } else if (tyyppi === "bossi_ilta") {
+      toimi = el("button", { class: "toissijainen", disabled: !!pk.bossiIlta,
+        onclick: (ev) => toiminto("/kayta", { tyyppi }, ev.currentTarget, "Bossi-ilta alkoi. Onnea dropeille!") }, "Aloita nyt");
+    } else {
+      toimi = el("span", { class: "ohje" }, "Käytä kaistan kortissa");
+    }
+    return el("div", { class: "kortti varasto-rivi" },
+      el("div", {}, el("div", {}, PALKINTO[tyyppi].nimi, " ", el("span", { class: "maara" }, `×${n}`))),
+      toimi);
+  });
+  $("varasto-osio").hidden = rivit.length === 0;
+  $("varasto").replaceChildren(...rivit);
 }
 
 function piirraSkillit(t) {
@@ -151,7 +229,9 @@ function piirraSkillit(t) {
 }
 
 function piirra(t) {
+  tila = t;
   piirraLuvut(t);
+  piirraPalkinnot(t);
   $("kaistat").replaceChildren(...t.kaistat.map(piirraKaista));
   piirraSkillit(t);
 
@@ -184,6 +264,17 @@ async function valitse(id, nappi) {
   } catch (e) {
     nappi.disabled = false;
     ilmoita(`Valinta epäonnistui: ${e.message}`);
+  }
+}
+
+async function toiminto(polku, runko, nappi, viesti) {
+  nappi.disabled = true;
+  try {
+    piirra(await kutsu(polku, { method: "POST", body: JSON.stringify(runko) }));
+    ilmoita(viesti);
+  } catch (e) {
+    nappi.disabled = false;
+    ilmoita(`Ei onnistunut: ${e.message}`);
   }
 }
 
