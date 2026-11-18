@@ -48,7 +48,7 @@ export async function paivitaWom(db: SupabaseClient, rsn: string): Promise<{ kir
 
 // ---------------------------------------------------------------- lukeminen
 
-// Projektin bossien KC-historia: tahti-ikkunan lukemat sekä viimeisin sitä edeltävä,
+// Projektin bossien KC-historia: tahti-ikkunan lukemat sekä suurin sitä edeltävä,
 // jotta ikkunan alun KC tiedetään.
 async function kcHistoria(db: SupabaseClient, nyt: number): Promise<Map<string, Lukema[]>> {
   const raja = new Date(nyt - TAHTI_IKKUNA_PV * PAIVA).toISOString();
@@ -57,8 +57,9 @@ async function kcHistoria(db: SupabaseClient, nyt: number): Promise<Map<string, 
     const mittari = `kc:${b.id}`;
     const [ikkuna, ennen] = await Promise.all([
       db.from("mittarilukema").select("arvo, aika").eq("mittari", mittari).gte("aika", raja).order("aika"),
+      // KC on suurin tunnettu lukema, joten ikkunan alun KC on suurin sitä edeltävä.
       db.from("mittarilukema").select("arvo, aika").eq("mittari", mittari).lt("aika", raja)
-        .order("aika", { ascending: false }).limit(1),
+        .order("arvo", { ascending: false }).limit(1),
     ]);
     const rivit = [...tarkista(ennen, mittari), ...tarkista(ikkuna, mittari)] as { arvo: string; aika: string }[];
     tulos.set(b.id, rivit.map((r) => ({ arvo: Number(r.arvo), aika: r.aika })));
@@ -109,12 +110,7 @@ export async function tilanne(db: SupabaseClient) {
 // KC jätetään oletuksena nykyiseksi: drop kirjataan yleensä heti tapon jälkeen.
 export async function kirjaaDroppi(db: SupabaseClient, bossi: string, esine: string, kc?: number): Promise<void> {
   if (!onUniikki(bossi, esine)) throw new Error(`${esine} ei ole bossin ${bossi} uniikki`);
-  let arvo = kc;
-  if (arvo === undefined) {
-    const r = await db.from("mittari_nyt").select("arvo").eq("mittari", `kc:${bossi}`).maybeSingle();
-    if (r.error) throw new Error(`mittari_nyt: ${r.error.message}`);
-    arvo = Number(r.data?.arvo ?? 0);
-  }
+  const arvo = kc ?? await nykyKc(db, bossi);
   if (!Number.isInteger(arvo) || arvo < 0) throw new Error("KC:n pitää olla kokonaisluku ≥ 0");
   const { error } = await db.from("droppi").insert({ bossi, esine, kc: arvo });
   if (error) throw new Error(`droppi: ${error.message}`);
@@ -127,10 +123,22 @@ export async function poistaDroppi(db: SupabaseClient, id: number): Promise<void
 
 // ---------------------------------------------------------------- Dink
 
+// Suurin tunnettu KC (WOM tai Dink), ks. kcHetkella.
 async function nykyKc(db: SupabaseClient, bossi: string): Promise<number> {
-  const r = await db.from("mittari_nyt").select("arvo").eq("mittari", `kc:${bossi}`).maybeSingle();
-  if (r.error) throw new Error(`mittari_nyt: ${r.error.message}`);
+  const r = await db.from("mittarilukema").select("arvo").eq("mittari", `kc:${bossi}`)
+    .order("arvo", { ascending: false }).limit(1).maybeSingle();
+  if (r.error) throw new Error(`mittarilukema: ${r.error.message}`);
   return Number(r.data?.arvo ?? 0);
+}
+
+// Dinkin KC kirjataan heti, koska hiscoret päivittyvät vasta uloskirjautuessa.
+async function kirjaaKc(db: SupabaseClient, bossi: string, kc: number): Promise<void> {
+  const r = await db.rpc("kirjaa_lukemat", {
+    p_lahde: "events",
+    p_aika: new Date().toISOString(),
+    lukemat: [{ mittari: `kc:${bossi}`, arvo: kc }],
+  });
+  if (r.error) throw new Error(`kirjaa_lukemat: ${r.error.message}`);
 }
 
 // Uniikki kirjataan automaattisesti, ellei sama esine samalla KC:lla ole jo kirjattu
@@ -146,12 +154,17 @@ async function kirjaaUniikki(db: SupabaseClient, bossi: string, esine: string, k
 export async function kirjaaDink(db: SupabaseClient, viesti: DinkViesti, rsn: string) {
   const t = tulkitse(viesti, rsn);
   if (t.tyyppi === "ohita") return { kirjattu: false, syy: t.syy };
+  if (t.tyyppi === "kc") {
+    await kirjaaKc(db, t.bossi, t.kc);
+    return { kirjattu: true, bossi: t.bossi, kc: t.kc };
+  }
   if (t.tyyppi === "pet") {
     const kc = await nykyKc(db, t.bossi);
     return { kirjattu: await kirjaaUniikki(db, t.bossi, t.esine, kc), pet: t.esine, kc };
   }
   const { error } = await db.from("lootti").insert({ bossi: t.bossi, kc: t.kc, arvo: t.arvo, esineet: t.esineet });
   if (error) throw new Error(`lootti: ${error.message}`);
+  if (t.kc !== null) await kirjaaKc(db, t.bossi, t.kc);
   const kc = t.kc ?? await nykyKc(db, t.bossi);
   for (const u of t.uniikit) await kirjaaUniikki(db, t.bossi, u, kc);
   return { kirjattu: true, bossi: t.bossi, arvo: t.arvo, uniikit: t.uniikit };

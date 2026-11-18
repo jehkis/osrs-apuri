@@ -2,7 +2,8 @@
 // Muoto: https://github.com/pajlads/DinkPlugin/blob/master/docs/json-examples.md
 //
 // Loot-viestissä ovat kaikki tapon esineet GE-hintoineen, kun Dinkin
-// "Min Loot Value" on 0. Petit tulevat erillisenä PET-viestinä.
+// "Min Loot Value" on 0. Petit tulevat erillisenä PET-viestinä ja KC jokaisen
+// tapon jälkeen KILL_COUNT-viestinä (hiscoret päivittyvät vasta uloskirjautuessa).
 
 import { BOSSIT, type ProjektiBossi } from "./projekti.ts";
 
@@ -15,6 +16,8 @@ export interface DinkViesti {
     category?: string;
     killCount?: number | null;
     petName?: string | null;
+    boss?: string;
+    count?: number;
   };
 }
 
@@ -28,6 +31,7 @@ export interface LoottiEsine {
 export type Tulkinta =
   | { tyyppi: "lootti"; bossi: string; kc: number | null; esineet: LoottiEsine[]; arvo: number; uniikit: string[] }
   | { tyyppi: "pet"; bossi: string; esine: string }
+  | { tyyppi: "kc"; bossi: string; kc: number }
   | { tyyppi: "ohita"; syy: string };
 
 // RSN:ssä välilyönti, alaviiva ja väliviiva ovat hiscoreissa sama merkki.
@@ -77,6 +81,13 @@ export function tulkitse(v: DinkViesti, rsn: string): Tulkinta {
       if (u) return { tyyppi: "pet", bossi: b.id, esine: u.nimi };
     }
     return { tyyppi: "ohita", syy: `ei projektin pet: ${nimi}` };
+  }
+  if (v.type === "KILL_COUNT") {
+    const b = bossiLahteesta(v.extra?.boss ?? "");
+    const kc = v.extra?.count;
+    if (!b) return { tyyppi: "ohita", syy: `ei projektin bossi: ${v.extra?.boss ?? "puuttuu"}` };
+    if (!Number.isInteger(kc) || kc! < 0) return { tyyppi: "ohita", syy: "KC puuttuu" };
+    return { tyyppi: "kc", bossi: b.id, kc: kc! };
   }
   return { tyyppi: "ohita", syy: `tyyppi ${v.type}` };
 }

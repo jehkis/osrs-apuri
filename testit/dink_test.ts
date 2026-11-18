@@ -48,3 +48,11 @@ Deno.test("lootin tila: GP/tappo ja arvio 3000 tapolle", () => {
   ], 2)!;
   assertEquals([l.perTappo, l.arvio3000, l.parhaat.map((p) => p.nimi)], [50_000, 150_000_000, ["b", "c"]]);
 });
+
+Deno.test("kill count -viesti antaa bossin KC:n heti", () => {
+  const kc = (boss: string, count: number) =>
+    tulkitse({ type: "KILL_COUNT", playerName: "zei_kill", extra: { boss, count } }, "zei_kill");
+  assertEquals(kc("Giant Mole", 76), { tyyppi: "kc", bossi: "giant_mole", kc: 76 });
+  assertEquals(kc("Lunar Chests", 14), { tyyppi: "kc", bossi: "lunar_chests", kc: 14 });
+  assertEquals(kc("Zulrah", 50).tyyppi, "ohita");
+});

@@ -77,3 +77,9 @@ Deno.test("bossin tila ja yhteenveto", () => {
   assertEquals(y.viikossa, null); // muilla ei historiaa
   assertEquals(y.uniikkejaYhteensa, 3 + 3 + 12 + 3 + 3);
 });
+
+Deno.test("hiscoren vanha lukema ei laske Dinkin tuoreempaa KC:ta", () => {
+  // Dink kirjasi 80, sitten WOM toi uloskirjautumista odottavan hiscoren 75.
+  const h = [{ arvo: 75, aika: pv(2) }, { arvo: 80, aika: pv(1) }, { arvo: 75, aika: pv(0.5) }];
+  assertEquals(kcHetkella(h, NYT), 80);
+});

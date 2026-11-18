@@ -70,7 +70,7 @@ export const BOSSIT: ProjektiBossi[] = [
     nimi: "Moons of Peril",
     lempinimi: "Moon",
     wiki: "Moons_of_Peril",
-    lahteet: ["Lunar Chest"],
+    lahteet: ["Lunar Chest", "Lunar Chests"],
     uniikit: [
       ...moonSarja("Blood Moon", "Dual macuahuitl"),
       ...moonSarja("Blue Moon", "Blue Moon spear"),
@@ -126,17 +126,12 @@ export interface Lukema {
   aika: string;
 }
 
-// KC annettuna hetkenä: viimeisin lukema, joka on tehty viimeistään silloin.
-// Lukemat kirjataan vain muutoksista, joten se on voimassa siihen asti.
+// KC annettuna hetkenä: suurin siihen mennessä kirjattu lukema. KC ei voi
+// pienentyä, joten hiscoren vanhentunut lukema ei kumoa Dinkin tuoreempaa.
 export function kcHetkella(historia: Lukema[], hetki: number): number | null {
   let tulos: number | null = null;
-  let paras = -Infinity;
   for (const l of historia) {
-    const t = Date.parse(l.aika);
-    if (t <= hetki && t > paras) {
-      paras = t;
-      tulos = l.arvo;
-    }
+    if (Date.parse(l.aika) <= hetki && (tulos === null || l.arvo > tulos)) tulos = l.arvo;
   }
   return tulos;
 }
