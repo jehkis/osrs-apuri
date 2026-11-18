@@ -31,6 +31,7 @@ export interface ProjektiBossi {
   wiki: string;
   lahteet: string[]; // Dinkin loot-viestin source (RuneLiten Loot Tracker -nimi)
   kuva: string; // wikin kuvatiedosto bossikortin otsikkoon
+  dropSivu: string; // wikin sivu, jonka droppitaulukosta odotusarvo lasketaan
   uniikit: Uniikki[];
 }
 
@@ -48,6 +49,7 @@ export const BOSSIT: ProjektiBossi[] = [
     nimi: "Giant Mole",
     lempinimi: "Myyrä",
     wiki: "Giant_Mole",
+    dropSivu: "Giant Mole",
     kuva: "Giant Mole.png",
     lahteet: ["Giant Mole"],
     uniikit: [
@@ -61,6 +63,7 @@ export const BOSSIT: ProjektiBossi[] = [
     nimi: "Sarachnis",
     lempinimi: "Sararis",
     wiki: "Sarachnis",
+    dropSivu: "Sarachnis",
     kuva: "Sarachnis.png",
     lahteet: ["Sarachnis"],
     uniikit: [
@@ -74,6 +77,7 @@ export const BOSSIT: ProjektiBossi[] = [
     nimi: "Moons of Peril",
     lempinimi: "Moon",
     wiki: "Moons_of_Peril",
+    dropSivu: "Lunar Chest",
     kuva: "Eclipse Moon.png",
     lahteet: ["Lunar Chest", "Lunar Chests"],
     uniikit: [
@@ -87,6 +91,7 @@ export const BOSSIT: ProjektiBossi[] = [
     nimi: "Mad Angel",
     lempinimi: "Hullu enkeli",
     wiki: "Mad_Angel",
+    dropSivu: "Mad Angel",
     kuva: "Mad Angel.webp",
     lahteet: ["Mad Angel"],
     uniikit: [
@@ -100,6 +105,7 @@ export const BOSSIT: ProjektiBossi[] = [
     nimi: "Amoxliatl",
     lempinimi: "Amox",
     wiki: "Amoxliatl",
+    dropSivu: "Amoxliatl",
     kuva: "Amoxliatl.png",
     lahteet: ["Amoxliatl"],
     uniikit: [
@@ -298,6 +304,46 @@ export function loottiTila(rivi: LoottiRivi | null, esineet: LoottiEsineYht[], p
     alku: rivi.alku,
     parhaat: [...esineet].sort((a, b) => b.arvo - a.arvo).slice(0, parhaat)
       .map(({ nimi, maara, arvo }) => ({ nimi, maara, arvo })),
+  };
+}
+
+// ---------------------------------------------------------------- kassa
+
+export interface Odotus {
+  bossi: string;
+  gpTappo: number;
+  erittely: { nimi: string; gp: number }[];
+}
+
+// Kassa: Dinkin kertynyt GP koko projektin odotettua tuottoa (5 × 3000 tappoa) vasten.
+// Tuuri verrataan odotukseen samoilla tapoilla, jotka Dink on kirjannut.
+export function kassa(bossit: { id: string; nimi: string; lootti?: ReturnType<typeof loottiTila> }[], odotukset: Odotus[]) {
+  const rivit = bossit.map((b) => {
+    const o = odotukset.find((x) => x.bossi === b.id) ?? null;
+    const gp = b.lootti?.arvo ?? 0;
+    const tappoja = b.lootti?.tappoja ?? 0;
+    return {
+      id: b.id,
+      nimi: b.nimi,
+      gp,
+      tappoja,
+      gpTappo: o?.gpTappo ?? null,
+      tavoite: o ? o.gpTappo * TAVOITE : null,
+      odotettu: o ? o.gpTappo * tappoja : null,
+      erittely: o?.erittely ?? [],
+    };
+  });
+  const tavoite = rivit.every((r) => r.tavoite !== null) ? rivit.reduce((s, r) => s + r.tavoite!, 0) : null;
+  const gp = rivit.reduce((s, r) => s + r.gp, 0);
+  const odotettu = rivit.reduce((s, r) => s + (r.odotettu ?? 0), 0);
+  return {
+    gp,
+    tavoite,
+    osuus: tavoite ? Math.min(1, gp / tavoite) : 0,
+    odotettu,
+    // Tuuri: kertynyt / odotettu samoilla tapoilla (1 = keskimäärin), null ilman tappoja.
+    tuuri: odotettu > 0 ? gp / odotettu : null,
+    bossit: rivit,
   };
 }
 

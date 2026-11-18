@@ -137,7 +137,7 @@ button.haamu { background: transparent; color: var(--hiljainen); }
 .toiminnot { display: flex; gap: 8px; }
 
 /* Luvut */
-.luvut { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-top: 20px; }
+.luvut { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 20px; }
 .luku { padding: 16px; display: grid; gap: 4px; align-content: start; }
 .luku .nimi { font-size: 0.8rem; color: var(--hiljainen); }
 .luku .arvo { font-size: 1.7rem; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
@@ -200,6 +200,32 @@ button.haamu { background: transparent; color: var(--hiljainen); }
 .selite span:nth-child(2) { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .selite .pallo { width: 9px; height: 9px; border-radius: 50%; background: var(--bossi); flex: none; }
 .selite:hover span:nth-child(2) { color: var(--bossi); }
+
+/* Kassa: kolikkokasa täyttyy alhaalta ylös */
+.kassa { margin-top: 12px; padding: 18px; display: grid; grid-template-columns: 180px 1fr; gap: 22px; align-items: center; }
+.kolikot { position: relative; width: 180px; aspect-ratio: 924 / 911; }
+.kolikot img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.kolikot-pohja { filter: grayscale(1) brightness(0.75) contrast(0.9); opacity: 0.32; }
+.kolikot-taytto { position: absolute; inset: 0; clip-path: inset(calc(100% - var(--taytto)) 0 0 0); transition: clip-path 0.8s ease; }
+.kolikot-taytto img { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--kulta) 45%, transparent)); }
+.kolikot-raja {
+  position: absolute; left: 8%; right: 8%; bottom: var(--taytto); height: 2px; border-radius: 2px;
+  background: var(--kulta); box-shadow: 0 0 8px var(--kulta); opacity: 0.8;
+}
+.kassa-tiedot { display: grid; gap: 6px; min-width: 0; }
+.kassa-tiedot h2 { margin: 0; }
+.kassa-summa { font-size: 2rem; font-weight: 700; color: var(--kulta); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.kassa-summa small { font-size: 1rem; font-weight: 500; color: var(--hiljainen); }
+.tuuri { font-size: 0.85rem; font-weight: 600; }
+.tuuri.plus { color: var(--vihrea); }
+.tuuri.miinus { color: var(--punainen); }
+.kassa-bossit { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 5px; }
+.kassa-bossit li { display: grid; grid-template-columns: 10px 92px 1fr 124px 76px; align-items: center; gap: 8px; font-size: 0.8rem; }
+.kassa-bossit .pallo { width: 9px; height: 9px; border-radius: 50%; background: var(--bossi); }
+.kb-nimi { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kb-palkki { height: 6px; border-radius: 99px; background: color-mix(in srgb, var(--bossi) 16%, var(--palkki)); overflow: hidden; }
+.kb-palkki span { display: block; height: 100%; background: var(--bossi); min-width: 0; }
+.kb-ev, .kb-luvut { text-align: right; }
 
 /* Bossikortin kuva ja väri */
 .bossi { border-top: 3px solid var(--bossi); scroll-margin-top: 16px; }
@@ -283,14 +309,15 @@ button.poista { background: transparent; color: inherit; padding: 0 6px; font-si
 
 .tyhja { padding: 14px; color: var(--hiljainen); font-size: 0.9rem; }
 
-@media (max-width: 1000px) {
-  .luvut { grid-template-columns: repeat(3, 1fr); }
-}
 @media (max-width: 820px) {
   .luvut { grid-template-columns: repeat(2, 1fr); }
   .luku:last-child:nth-child(odd) { grid-column: 1 / -1; }
 }
 @media (max-width: 560px) {
+  .kassa { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+  .kassa-tiedot { width: 100%; }
+  .kassa-bossit li { grid-template-columns: 10px 80px 1fr 112px; text-align: left; }
+  .kb-ev { display: none; }
   .osaselite { display: flex; flex-wrap: wrap; gap: 6px 14px; }
   .selite span:nth-child(2) { overflow: visible; }
 }

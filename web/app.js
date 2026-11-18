@@ -96,10 +96,43 @@ function piirraLuvut(y) {
     lukukortti("Valmis", y.valmistuu ? kuukausi(y.valmistuu) : "–",
       y.valmistuu ? `Hitain bossi, ${paiva(y.valmistuu)}` : "Joka bossilla pitää olla tahti"),
     lukukortti("Uniikit", [luku(y.uniikkejaSaatu), el("small", {}, `/ ${y.uniikkejaYhteensa}`)], "Eri uniikkia saatu"),
-    lukukortti("Lootti", y.gpBosseja ? [gp(y.gp), el("small", {}, "gp")] : "–",
-      y.gpBosseja
-        ? `3000 tapolla ~${gp(y.gpArvio)} gp${y.gpBosseja < 5 ? ` (${y.gpBosseja}/5 bossista dataa)` : ""}`
-        : "Kertyy, kun Dink lähettää ensimmäisen lootin"),
+  );
+}
+
+// Kassa: kolikkokasa täyttyy alhaalta ylös, kun Dinkin lootti kertyy kohti
+// viiden bossin 3000 tapon odotettua tuottoa.
+
+function tarkkaProsentti(osuus) {
+  if (osuus === 0) return "0 %";
+  if (osuus < 0.001) return `${luku(osuus * 100, 3)} %`;
+  return prosentti(osuus);
+}
+
+function piirraKassa(k, bossit) {
+  const tuuri = k.tuuri === null ? null : k.tuuri - 1;
+  const varit = new Map(bossit.map((b) => [b.id, b.lempinimi]));
+  $("kassa").replaceChildren(
+    el("div", { class: "kolikot", role: "img", "aria-label": `Kassa ${tarkkaProsentti(k.osuus)} täynnä`, style: `--taytto:${k.osuus * 100}%` },
+      el("img", { class: "kolikot-pohja", src: KOLIKOT, alt: "" }),
+      el("div", { class: "kolikot-taytto" }, el("img", { src: KOLIKOT, alt: "" })),
+      k.osuus > 0 && k.osuus < 1 && el("div", { class: "kolikot-raja" })),
+    el("div", { class: "kassa-tiedot" },
+      el("h2", {}, "Kassa"),
+      el("div", { class: "kassa-summa" }, gp(k.gp), el("small", {}, k.tavoite ? ` / ${gp(k.tavoite)} gp` : " gp")),
+      el("div", { class: "hiljainen" }, k.tavoite
+        ? `${tarkkaProsentti(k.osuus)} viiden bossin 3000 tapon odotetusta tuotosta`
+        : "Tavoite lasketaan wikin droppitaulukoista seuraavalla haulla"),
+      tuuri !== null && el("div", { class: `tuuri ${tuuri >= 0 ? "plus" : "miinus"}` },
+        `Tuuri ${tuuri >= 0 ? "+" : "−"}${luku(Math.abs(tuuri) * 100)} % odotukseen nähden (${gp(k.odotettu)} odotettu samoilla tapoilla)`),
+      el("ul", { class: "kassa-bossit" }, k.bossit.map((r) =>
+        el("li", { class: `b-${r.id}` },
+          el("span", { class: "pallo" }),
+          el("span", { class: "kb-nimi" }, varit.get(r.id) ?? r.nimi),
+          el("span", { class: "kb-palkki" }, el("span", { style: `width:${r.tavoite ? Math.min(100, (r.gp / r.tavoite) * 100) : 0}%` })),
+          el("span", { class: "numero kb-luvut" }, `${gp(r.gp)} / ${r.tavoite ? gp(r.tavoite) : "–"}`),
+          el("span", { class: "numero hiljainen kb-ev", title: "Odotusarvo per tappo wikin droppitaulukosta ja GE-hinnoista" },
+            r.gpTappo ? `${gp(r.gpTappo)}/tappo` : "")))),
+    ),
   );
 }
 
@@ -118,6 +151,7 @@ const KUVAT = "https://oldschool.runescape.wiki/images/";
 const tiedosto = (f) => encodeURIComponent(f.replaceAll(" ", "_"));
 const esineKuva = (f) => KUVAT + tiedosto(f);
 const bossiKuva = (f) => `${KUVAT}thumb/${tiedosto(f)}/120px-${tiedosto(f)}`;
+const KOLIKOT = `${KUVAT}thumb/Coins_detail.png/320px-Coins_detail.png`;
 
 // Valittu uniikki (`${bossi}|${esine}`) ja onko sen kirjauslomake auki. Säilyvät uudelleenpiirrossa.
 let valittu = null;
@@ -300,6 +334,7 @@ function piirra(t) {
   viimeisin = t;
   piirraLuvut(t.yhteenveto);
   piirraOsat(t.bossit);
+  piirraKassa(t.kassa, t.bossit);
   $("bossit").replaceChildren(...t.bossit.map(bossikortti));
   piirraDropit(t.viimeisimmat, t.bossit);
   piirraLahteet(t.wom);

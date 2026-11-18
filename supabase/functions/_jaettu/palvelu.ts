@@ -4,12 +4,17 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.45.4";
 import { type WomPelaaja, womAika, womMittareiksi } from "./wom.ts";
 import {
-  BOSSIT, bossinTila, type Droppi, type Lukema, loottiTila, type LoottiRivi, onUniikki, TAHTI_IKKUNA_PV, yhteenveto,
+  BOSSIT, bossinTila, type Droppi, kassa, type Odotus, type Lukema, loottiTila, type LoottiRivi, onUniikki, TAHTI_IKKUNA_PV, yhteenveto,
 } from "./projekti.ts";
 import { type DinkViesti, tulkitse } from "./dink.ts";
+import { odotusarvo, type WikiDroppi } from "./odotusarvo.ts";
 
 const WOM = "https://api.wiseoldman.net/v2";
 const OTSAKKEET = { "User-Agent": "osrs-apuri", "Content-Type": "application/json" };
+const WIKI = "https://oldschool.runescape.wiki/api.php";
+// Wikin hinta-API vaatii kuvaavan User-Agentin.
+const HINNAT = "https://prices.runescape.wiki/api/v1/osrs";
+const HINTA_OTSAKKEET = { "User-Agent": "osrs-apuri - bossiprojektin lootin odotusarvo" };
 const PAIVA = 86_400_000;
 
 function tarkista<T>(r: { data: T; error: { message: string } | null }, mita: string): NonNullable<T> {
@@ -39,11 +44,66 @@ export async function paivitaWom(db: SupabaseClient, rsn: string): Promise<{ kir
       await db.rpc("kirjaa_lukemat", { p_lahde: "wom", p_aika: womAika(pelaaja), lukemat: womMittareiksi(pelaaja) }),
       "kirjaa_lukemat",
     ));
+    // Odotusarvot kerran päivässä; virhe ei kaada WOM-hakua.
+    try {
+      if (await odotusVanhentunut(db)) await paivitaOdotusarvot(db);
+    } catch (e) {
+      console.error("odotusarvo:", e);
+    }
     return { kirjattu };
   } catch (e) {
     await db.rpc("kirjaa_virhe", { p_lahde: "wom", p_viesti: e instanceof Error ? e.message : String(e) });
     throw e;
   }
+}
+
+// ---------------------------------------------------------------- odotusarvo
+
+async function odotusVanhentunut(db: SupabaseClient): Promise<boolean> {
+  const r = tarkista(await db.from("odotusarvo").select("paivitetty").order("paivitetty").limit(1), "odotusarvo");
+  return r.length < BOSSIT.length || Date.now() - Date.parse(r[0].paivitetty) > PAIVA;
+}
+
+async function haeJson(url: string, otsakkeet: Record<string, string>) {
+  const v = await fetch(url, { headers: otsakkeet });
+  if (!v.ok) throw new Error(`${new URL(url).host} vastasi ${v.status}`);
+  return await v.json();
+}
+
+// GE-hinta: uusimman osto- ja myyntihinnan keskiarvo.
+async function hintahaku(): Promise<(nimi: string) => number | null> {
+  const [kartta, uusin] = await Promise.all([
+    haeJson(`${HINNAT}/mapping`, HINTA_OTSAKKEET) as Promise<{ id: number; name: string }[]>,
+    haeJson(`${HINNAT}/latest`, HINTA_OTSAKKEET) as Promise<{ data: Record<string, { high: number | null; low: number | null }> }>,
+  ]);
+  const idt = new Map(kartta.map((m) => [m.name.toLowerCase(), m.id]));
+  return (nimi) => {
+    const id = idt.get(nimi.toLowerCase());
+    const p = id === undefined ? undefined : uusin.data[String(id)];
+    if (!p) return null;
+    return p.high && p.low ? (p.high + p.low) / 2 : (p.high ?? p.low ?? null);
+  };
+}
+
+export async function paivitaOdotusarvot(db: SupabaseClient): Promise<void> {
+  const hinta = await hintahaku();
+  const nyt = new Date().toISOString();
+  const rivit = await Promise.all(BOSSIT.map(async (b) => {
+    const kysely = `bucket('dropsline').select('drop_json').where('page_name','${b.dropSivu}').limit(1000).run()`;
+    const d = await haeJson(`${WIKI}?action=bucket&format=json&query=${encodeURIComponent(kysely)}`, OTSAKKEET);
+    const dropit: WikiDroppi[] = (d.bucket ?? []).map((r: { drop_json: string }) => JSON.parse(r.drop_json));
+    if (dropit.length < 5) throw new Error(`wiki palautti ${b.dropSivu}: ${dropit.length} droppia`);
+    const o = odotusarvo(dropit, hinta);
+    return { bossi: b.id, gp_tappo: o.gpTappo, erittely: o.erittely, paivitetty: nyt };
+  }));
+  const { error } = await db.from("odotusarvo").upsert(rivit);
+  if (error) throw new Error(`odotusarvo: ${error.message}`);
+}
+
+async function odotukset(db: SupabaseClient): Promise<Odotus[]> {
+  const r = tarkista(await db.from("odotusarvo").select("bossi, gp_tappo, erittely"), "odotusarvo");
+  return r.map((x: { bossi: string; gp_tappo: string; erittely: Odotus["erittely"] }) =>
+    ({ bossi: x.bossi, gpTappo: Number(x.gp_tappo), erittely: x.erittely }));
 }
 
 // ---------------------------------------------------------------- lukeminen
@@ -86,11 +146,12 @@ async function lootit(db: SupabaseClient) {
 
 export async function tilanne(db: SupabaseClient) {
   const nyt = Date.now();
-  const [historia, kaikki, lahde, l] = await Promise.all([
+  const [historia, kaikki, lahde, l, o] = await Promise.all([
     kcHistoria(db, nyt),
     dropit(db),
     db.from("lahde").select("paivitetty, virhe").eq("id", "wom").single(),
     lootit(db),
+    odotukset(db),
   ]);
   const bossit = BOSSIT.map((b) => ({
     ...bossinTila(b, historia.get(b.id) ?? [], kaikki, nyt),
@@ -99,6 +160,7 @@ export async function tilanne(db: SupabaseClient) {
   const nimet = new Map(BOSSIT.map((b) => [b.id, b.nimi]));
   return {
     yhteenveto: yhteenveto(bossit, nyt),
+    kassa: kassa(bossit, o),
     bossit,
     viimeisimmat: kaikki.slice(-10).reverse().map((d) => ({ ...d, bossiNimi: nimet.get(d.bossi) ?? d.bossi })),
     wom: tarkista(lahde, "lahde"),
