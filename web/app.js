@@ -16,6 +16,14 @@ const prosentti = (osuus) => `${luku(osuus * 100, osuus < 0.1 ? 1 : 0)} %`;
 
 const harvinaisuus = (r) => `1/${luku(r, r % 1 ? 1 : 0)}`;
 
+// GP lyhyesti: 950 k, 12,3 M, 1,25 B.
+function gp(n) {
+  if (n >= 1e9) return `${luku(n / 1e9, 2)} B`;
+  if (n >= 1e6) return `${luku(n / 1e6, n >= 1e8 ? 0 : 1)} M`;
+  if (n >= 1e3) return `${luku(n / 1e3, 0)} k`;
+  return luku(n);
+}
+
 const lyhytKc = (v) => (v >= 1000 ? `${luku(v / 1000, v % 1000 ? 1 : 0)}k` : String(v));
 
 function sitten(iso) {
@@ -88,6 +96,10 @@ function piirraLuvut(y) {
     lukukortti("Valmis", y.valmistuu ? kuukausi(y.valmistuu) : "–",
       y.valmistuu ? `Hitain bossi, ${paiva(y.valmistuu)}` : "Joka bossilla pitää olla tahti"),
     lukukortti("Uniikit", [luku(y.uniikkejaSaatu), el("small", {}, `/ ${y.uniikkejaYhteensa}`)], "Eri uniikkia saatu"),
+    lukukortti("Lootti", y.gpBosseja ? [gp(y.gp), el("small", {}, "gp")] : "–",
+      y.gpBosseja
+        ? `3000 tapolla ~${gp(y.gpArvio)} gp${y.gpBosseja < 5 ? ` (${y.gpBosseja}/5 bossista dataa)` : ""}`
+        : "Kertyy, kun Dink lähettää ensimmäisen lootin"),
   );
 }
 
@@ -194,7 +206,19 @@ function bossikortti(b) {
       el("span", {}, tahti)),
     virstanpylvaat(b),
     b.id === "lunar_chests" && el("p", { class: "huomio" }, "KC = avatut arkut. Haarniskasarjassa ei tule tuplia, ennen kuin sarja on täysi."),
+    lootti(b),
     ryhmitelty ? el("div", { class: "sarjat" }, uniikit(b)) : uniikit(b));
+}
+
+function lootti(b) {
+  const l = b.lootti;
+  if (!l) return el("p", { class: "huomio" }, "Lootti: ei vielä Dink-dataa.");
+  return el("div", { class: "lootti" },
+    el("div", { class: "lootti-luvut" },
+      el("span", {}, el("strong", {}, `${gp(l.arvo)} gp`), ` · ${luku(l.tappoja)} ${b.id === "lunar_chests" ? "arkkua" : "tappoa"}`),
+      el("span", {}, `${gp(l.perTappo)}/kpl · 3000: ~${gp(l.arvio3000)}`)),
+    el("ul", { class: "lootti-parhaat" }, l.parhaat.map((e) =>
+      el("li", {}, el("span", {}, `${e.nimi}${e.maara > 1 ? ` ×${luku(e.maara)}` : ""}`), el("span", { class: "numero" }, gp(e.arvo))))));
 }
 
 function piirraDropit(lista) {

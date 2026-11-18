@@ -11,6 +11,7 @@ const MIGRAATIOT = [
   "20261115000004_palkinnot.sql",
   "20261115000005_tauko.sql",
   "20261118000001_bossiprojekti.sql",
+  "20261118000002_lootti.sql",
 ]
   .map((m) => new URL(`../supabase/migrations/${m}`, import.meta.url));
 
@@ -79,7 +80,7 @@ Deno.test("bossiprojekti poistaa max cape -taulut ja -funktiot", async () => {
   const t = await db.query<{ n: string }>(
     "select table_name as n from information_schema.tables where table_schema = 'public' order by 1",
   );
-  assertEquals(t.rows.map((r) => r.n), ["droppi", "lahde", "mittari_nyt", "mittarilukema"]);
+  assertEquals(t.rows.map((r) => r.n), ["droppi", "lahde", "lootti", "lootti_bossi", "lootti_esine", "mittari_nyt", "mittarilukema"]);
   const f = await db.query<{ n: string }>(
     "select routine_name as n from information_schema.routines where routine_schema = 'public' order by 1",
   );
@@ -97,5 +98,17 @@ Deno.test("droppi sallii saman esineen monesti mutta ei negatiivista KC:ta", asy
   try { await db.exec("insert into droppi (bossi, esine, kc) values ('sarachnis', 'Jar of eyes', -1)"); }
   catch (e) { virhe = String(e); }
   assertEquals(virhe.includes("check"), true);
+  await db.close();
+});
+
+Deno.test("lootin näkymät summaavat tapot ja esineet", async () => {
+  const db = await kanta();
+  await db.exec(`insert into lootti (bossi, kc, arvo, esineet) values
+    ('giant_mole', 76, 2300, '[{"id":1,"nimi":"Big bones","maara":1,"hinta":300},{"id":2,"nimi":"Mole claw","maara":2,"hinta":1000}]'),
+    ('giant_mole', 77, 1300, '[{"id":1,"nimi":"Big bones","maara":1,"hinta":300},{"id":2,"nimi":"Mole claw","maara":1,"hinta":1000}]');`);
+  const b = await db.query<{ tappoja: number; arvo: string }>("select tappoja, arvo from lootti_bossi");
+  assertEquals([b.rows[0].tappoja, Number(b.rows[0].arvo)], [2, 3600]);
+  const e = await db.query<{ nimi: string; maara: string; arvo: string }>("select nimi, maara, arvo from lootti_esine order by nimi");
+  assertEquals(e.rows.map((r) => [r.nimi, Number(r.maara), Number(r.arvo)]), [["Big bones", 2, 600], ["Mole claw", 3, 3000]]);
   await db.close();
 });

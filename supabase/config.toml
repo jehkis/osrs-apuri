@@ -433,3 +433,7 @@ verify_jwt = false
 # Käyttäjä tarkistetaan funktiossa itse (auth.getUser), jotta CORS-esipyyntö menee läpi.
 [functions.api]
 verify_jwt = false
+
+# Dink kutsuu ilman Supabase-tunnusta; avain tarkistetaan funktiossa (?avain=).
+[functions.dink]
+verify_jwt = false

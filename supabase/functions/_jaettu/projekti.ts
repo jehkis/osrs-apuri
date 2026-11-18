@@ -28,6 +28,7 @@ export interface ProjektiBossi {
   nimi: string;
   lempinimi: string;
   wiki: string;
+  lahteet: string[]; // Dinkin loot-viestin source (RuneLiten Loot Tracker -nimi)
   uniikit: Uniikki[];
 }
 
@@ -45,6 +46,7 @@ export const BOSSIT: ProjektiBossi[] = [
     nimi: "Giant Mole",
     lempinimi: "Myyrä",
     wiki: "Giant_Mole",
+    lahteet: ["Giant Mole"],
     uniikit: [
       { nimi: "Baby mole", harvinaisuus: 3000, pet: true },
       { nimi: "Long bone", harvinaisuus: 400 },
@@ -56,6 +58,7 @@ export const BOSSIT: ProjektiBossi[] = [
     nimi: "Sarachnis",
     lempinimi: "Sararis",
     wiki: "Sarachnis",
+    lahteet: ["Sarachnis"],
     uniikit: [
       { nimi: "Sarachnis cudgel", harvinaisuus: 384 },
       { nimi: "Jar of eyes", harvinaisuus: 2000 },
@@ -67,6 +70,7 @@ export const BOSSIT: ProjektiBossi[] = [
     nimi: "Moons of Peril",
     lempinimi: "Moon",
     wiki: "Moons_of_Peril",
+    lahteet: ["Lunar Chest"],
     uniikit: [
       ...moonSarja("Blood Moon", "Dual macuahuitl"),
       ...moonSarja("Blue Moon", "Blue Moon spear"),
@@ -78,6 +82,7 @@ export const BOSSIT: ProjektiBossi[] = [
     nimi: "Mad Angel",
     lempinimi: "Hullu enkeli",
     wiki: "Mad_Angel",
+    lahteet: ["Mad Angel"],
     uniikit: [
       { nimi: "Hallowfell", harvinaisuus: 127 },
       { nimi: "Jar of Light", harvinaisuus: 1000 },
@@ -89,6 +94,7 @@ export const BOSSIT: ProjektiBossi[] = [
     nimi: "Amoxliatl",
     lempinimi: "Amox",
     wiki: "Amoxliatl",
+    lahteet: ["Amoxliatl"],
     uniikit: [
       { nimi: "Pendant of Ates (inert)", harvinaisuus: 25 },
       { nimi: "Glacial temotli", harvinaisuus: 100 },
@@ -246,7 +252,38 @@ export function bossinTila(
   };
 }
 
-export function yhteenveto(bossit: BossinTila[], nyt: number) {
+// ---------------------------------------------------------------- lootti
+
+export interface LoottiRivi {
+  bossi: string;
+  tappoja: number; // Dinkin kirjaamat tapot (Moonsilla arkut)
+  arvo: number;
+  alku: string;
+}
+
+export interface LoottiEsineYht {
+  nimi: string;
+  maara: number;
+  arvo: number;
+}
+
+// GP/tappo kirjatuista tapoista ja sen perusteella arvio koko 3000 tapon tuotosta.
+// Lootti kertyy vasta Dinkin asennuksesta, joten aiemmat KC:t eivät ole mukana.
+export function loottiTila(rivi: LoottiRivi | null, esineet: LoottiEsineYht[], parhaat = 5) {
+  if (!rivi || rivi.tappoja === 0) return null;
+  const perTappo = rivi.arvo / rivi.tappoja;
+  return {
+    tappoja: rivi.tappoja,
+    arvo: rivi.arvo,
+    perTappo,
+    arvio3000: perTappo * TAVOITE,
+    alku: rivi.alku,
+    parhaat: [...esineet].sort((a, b) => b.arvo - a.arvo).slice(0, parhaat)
+      .map(({ nimi, maara, arvo }) => ({ nimi, maara, arvo })),
+  };
+}
+
+export function yhteenveto(bossit: (BossinTila & { lootti?: ReturnType<typeof loottiTila> })[], nyt: number) {
   const kc = bossit.reduce((s, b) => s + Math.min(b.kc, TAVOITE), 0);
   const tavoite = bossit.length * TAVOITE;
   const tahdit = bossit.map((b) => b.tahti.viikossa);
@@ -262,6 +299,10 @@ export function yhteenveto(bossit: BossinTila[], nyt: number) {
     projektissa: bossit.reduce((s, b) => s + Math.max(0, b.kc - b.alkuKc), 0),
     viikossa,
     valmistuu: valmis,
+    // Lootti: kertynyt GP ja arvio viiden bossin 3000 tapon tuotosta niistä, joilta on dataa.
+    gp: bossit.reduce((s, b) => s + (b.lootti?.arvo ?? 0), 0),
+    gpArvio: bossit.reduce((s, b) => s + (b.lootti?.arvio3000 ?? 0), 0),
+    gpBosseja: bossit.filter((b) => b.lootti).length,
     uniikkejaSaatu: uniikit.filter((u) => u.saadut.length > 0).length,
     uniikkejaYhteensa: uniikit.length,
     paivitetty: new Date(nyt).toISOString(),
