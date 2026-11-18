@@ -1,6 +1,6 @@
 import { assertAlmostEquals, assertEquals } from "jsr:@std/assert@1.0.8";
 import {
-  BOSSIT, bossinTila, kcHetkella, onUniikki, tahti, uniikinTila, valmistuu, virstanpylvaat, yhteenveto,
+  BOSSIT, bossinTila, kcHetkella, kcLahde, onUniikki, tahti, uniikinTila, valmistuu, virstanpylvaat, yhteenveto,
 } from "../supabase/functions/_jaettu/projekti.ts";
 
 const PAIVA = 86_400_000;
@@ -82,4 +82,14 @@ Deno.test("hiscoren vanha lukema ei laske Dinkin tuoreempaa KC:ta", () => {
   // Dink kirjasi 80, sitten WOM toi uloskirjautumista odottavan hiscoren 75.
   const h = [{ arvo: 75, aika: pv(2) }, { arvo: 80, aika: pv(1) }, { arvo: 75, aika: pv(0.5) }];
   assertEquals(kcHetkella(h, NYT), 80);
+});
+
+Deno.test("KC:n lähde on lukema, joka nosti KC:n nykyiseen arvoon", () => {
+  const h = [
+    { arvo: 75, aika: pv(3), lahde: "wom" },
+    { arvo: 127, aika: pv(1), lahde: "events" },
+    { arvo: 127, aika: pv(0.5), lahde: "wom" },
+  ];
+  assertEquals(kcLahde(h, NYT), { lahde: "events", aika: pv(1) });
+  assertEquals(kcLahde([], NYT), null);
 });

@@ -124,6 +124,16 @@ export function virstanpylvaat(kc: number) {
 export interface Lukema {
   arvo: number;
   aika: string;
+  lahde?: string; // 'wom' tai 'events' (Dink)
+}
+
+// Mistä nykyinen KC tuli: ensimmäinen lukema, joka nosti KC:n nykyiseen arvoonsa.
+export function kcLahde(historia: Lukema[], nyt: number): { lahde: string; aika: string } | null {
+  const kc = kcHetkella(historia, nyt);
+  if (kc === null) return null;
+  const osumat = historia.filter((l) => l.arvo === kc && Date.parse(l.aika) <= nyt)
+    .sort((a, b) => Date.parse(a.aika) - Date.parse(b.aika));
+  return osumat.length ? { lahde: osumat[0].lahde ?? "wom", aika: osumat[0].aika } : null;
 }
 
 // KC annettuna hetkenä: suurin siihen mennessä kirjattu lukema. KC ei voi
@@ -216,6 +226,7 @@ export interface BossinTila {
   wiki: string;
   kc: number;
   alkuKc: number; // KC projektin alkaessa
+  kcLahde: { lahde: string; aika: string } | null;
   osuus: number; // kc / TAVOITE, enintään 1
   virstanpylvaat: ReturnType<typeof virstanpylvaat>;
   tahti: Tahti;
@@ -239,6 +250,7 @@ export function bossinTila(
     wiki: b.wiki,
     kc,
     alkuKc: kcHetkella(historia, Date.parse(ALOITUS)) ?? Math.min(kc, ...historia.map((l) => l.arvo)),
+    kcLahde: kcLahde(historia, nyt),
     osuus: Math.min(1, kc / TAVOITE),
     virstanpylvaat: virstanpylvaat(kc),
     tahti: t,

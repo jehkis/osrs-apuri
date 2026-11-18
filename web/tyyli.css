@@ -155,6 +155,10 @@ button.haamu { background: transparent; color: var(--hiljainen); }
 .bossi .kc small { font-size: 0.9rem; font-weight: 500; color: var(--hiljainen); }
 .bossi.valmis .kc { color: var(--vihrea); }
 .bossi-tiedot { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 0.85rem; color: var(--hiljainen); font-variant-numeric: tabular-nums; }
+.kc-lahde { margin: 0; font-size: 0.78rem; color: var(--hiljainen); display: flex; align-items: center; gap: 6px; }
+.lahde-merkki { font-size: 0.68rem; font-weight: 700; padding: 1px 7px; border-radius: 99px; letter-spacing: 0.02em; }
+.lahde-merkki.dink { background: color-mix(in srgb, var(--vihrea) 20%, transparent); color: var(--vihrea); }
+.lahde-merkki.wom { background: var(--pinta-2); color: var(--hiljainen); }
 .huomio { margin: 0; font-size: 0.8rem; color: var(--hiljainen); }
 
 .virstat { list-style: none; margin: 0; padding: 0; display: flex; gap: 4px; flex-wrap: wrap; }

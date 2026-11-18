@@ -56,13 +56,13 @@ async function kcHistoria(db: SupabaseClient, nyt: number): Promise<Map<string, 
   await Promise.all(BOSSIT.map(async (b) => {
     const mittari = `kc:${b.id}`;
     const [ikkuna, ennen] = await Promise.all([
-      db.from("mittarilukema").select("arvo, aika").eq("mittari", mittari).gte("aika", raja).order("aika"),
+      db.from("mittarilukema").select("arvo, aika, lahde").eq("mittari", mittari).gte("aika", raja).order("aika"),
       // KC on suurin tunnettu lukema, joten ikkunan alun KC on suurin sitä edeltävä.
-      db.from("mittarilukema").select("arvo, aika").eq("mittari", mittari).lt("aika", raja)
+      db.from("mittarilukema").select("arvo, aika, lahde").eq("mittari", mittari).lt("aika", raja)
         .order("arvo", { ascending: false }).limit(1),
     ]);
-    const rivit = [...tarkista(ennen, mittari), ...tarkista(ikkuna, mittari)] as { arvo: string; aika: string }[];
-    tulos.set(b.id, rivit.map((r) => ({ arvo: Number(r.arvo), aika: r.aika })));
+    const rivit = [...tarkista(ennen, mittari), ...tarkista(ikkuna, mittari)] as { arvo: string; aika: string; lahde: string }[];
+    tulos.set(b.id, rivit.map((r) => ({ arvo: Number(r.arvo), aika: r.aika, lahde: r.lahde })));
   }));
   return tulos;
 }

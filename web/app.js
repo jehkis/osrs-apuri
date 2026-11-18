@@ -204,10 +204,21 @@ function bossikortti(b) {
     el("div", { class: "bossi-tiedot" },
       el("span", {}, valmis ? "3000 KC valmis!" : `Seuraava ${luku(v.seuraava)}: ${luku(v.puuttuu)} KC`),
       el("span", {}, tahti)),
+    kcLahde(b),
     virstanpylvaat(b),
     b.id === "lunar_chests" && el("p", { class: "huomio" }, "KC = avatut arkut. Haarniskasarjassa ei tule tuplia, ennen kuin sarja on täysi."),
     lootti(b),
     ryhmitelty ? el("div", { class: "sarjat" }, uniikit(b)) : uniikit(b));
+}
+
+// Mistä KC tuli: Dink heti tapon jälkeen, WOM vasta uloskirjautumisen jälkeen.
+function kcLahde(b) {
+  const l = b.kcLahde;
+  if (!l) return null;
+  const dink = l.lahde === "events";
+  return el("p", { class: "kc-lahde", title: dink ? "Dink lähetti KC:n heti tapon jälkeen" : "Virallisista hiscoreista WOM:n kautta (päivittyy uloskirjautuessa)" },
+    el("span", { class: `lahde-merkki ${dink ? "dink" : "wom"}` }, dink ? "Dink" : "WOM"),
+    ` KC päivittyi ${sitten(l.aika)}`);
 }
 
 function lootti(b) {
