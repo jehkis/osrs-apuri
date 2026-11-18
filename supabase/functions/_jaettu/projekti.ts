@@ -21,6 +21,7 @@ export interface Uniikki {
   pet?: boolean;
   ryhma?: string; // Moonsin haarniskasarja
   huomio?: string;
+  kuva?: string; // wikin kuvatiedosto, jos eri kuin "<nimi>.png"
 }
 
 export interface ProjektiBossi {
@@ -29,6 +30,7 @@ export interface ProjektiBossi {
   lempinimi: string;
   wiki: string;
   lahteet: string[]; // Dinkin loot-viestin source (RuneLiten Loot Tracker -nimi)
+  kuva: string; // wikin kuvatiedosto bossikortin otsikkoon
   uniikit: Uniikki[];
 }
 
@@ -46,9 +48,10 @@ export const BOSSIT: ProjektiBossi[] = [
     nimi: "Giant Mole",
     lempinimi: "Myyrä",
     wiki: "Giant_Mole",
+    kuva: "Giant Mole.png",
     lahteet: ["Giant Mole"],
     uniikit: [
-      { nimi: "Baby mole", harvinaisuus: 3000, pet: true },
+      { nimi: "Baby mole", harvinaisuus: 3000, pet: true, kuva: "Baby Mole.png" },
       { nimi: "Long bone", harvinaisuus: 400 },
       { nimi: "Curved bone", harvinaisuus: 5012.5 },
     ],
@@ -58,10 +61,11 @@ export const BOSSIT: ProjektiBossi[] = [
     nimi: "Sarachnis",
     lempinimi: "Sararis",
     wiki: "Sarachnis",
+    kuva: "Sarachnis.png",
     lahteet: ["Sarachnis"],
     uniikit: [
       { nimi: "Sarachnis cudgel", harvinaisuus: 384 },
-      { nimi: "Jar of eyes", harvinaisuus: 2000 },
+      { nimi: "Jar of eyes", harvinaisuus: 2000, kuva: "Jar of Eyes.png" },
       { nimi: "Sraracha", harvinaisuus: 3000, pet: true },
     ],
   },
@@ -70,6 +74,7 @@ export const BOSSIT: ProjektiBossi[] = [
     nimi: "Moons of Peril",
     lempinimi: "Moon",
     wiki: "Moons_of_Peril",
+    kuva: "Eclipse Moon.png",
     lahteet: ["Lunar Chest", "Lunar Chests"],
     uniikit: [
       ...moonSarja("Blood Moon", "Dual macuahuitl"),
@@ -82,6 +87,7 @@ export const BOSSIT: ProjektiBossi[] = [
     nimi: "Mad Angel",
     lempinimi: "Hullu enkeli",
     wiki: "Mad_Angel",
+    kuva: "Mad Angel.webp",
     lahteet: ["Mad Angel"],
     uniikit: [
       { nimi: "Hallowfell", harvinaisuus: 127 },
@@ -94,6 +100,7 @@ export const BOSSIT: ProjektiBossi[] = [
     nimi: "Amoxliatl",
     lempinimi: "Amox",
     wiki: "Amoxliatl",
+    kuva: "Amoxliatl.png",
     lahteet: ["Amoxliatl"],
     uniikit: [
       { nimi: "Pendant of Ates (inert)", harvinaisuus: 25 },
@@ -187,6 +194,7 @@ export interface UniikinTila {
   pet: boolean;
   ryhma: string | null;
   huomio: string | null;
+  kuva: string;
   saadut: { id: number; kc: number; aika: string }[];
   // Kuivuus: KC:t viimeisimmän saman esineen jälkeen (tai alusta).
   kuivana: number;
@@ -209,6 +217,7 @@ export function uniikinTila(u: Uniikki, kc: number, dropit: Droppi[]): UniikinTi
     pet: u.pet ?? false,
     ryhma: u.ryhma ?? null,
     huomio: u.huomio ?? null,
+    kuva: u.kuva ?? `${u.nimi}.png`,
     saadut,
     kuivana,
     kertaa: kuivana / u.harvinaisuus,
@@ -224,6 +233,7 @@ export interface BossinTila {
   nimi: string;
   lempinimi: string;
   wiki: string;
+  kuva: string;
   kc: number;
   alkuKc: number; // KC projektin alkaessa
   kcLahde: { lahde: string; aika: string } | null;
@@ -248,6 +258,7 @@ export function bossinTila(
     nimi: b.nimi,
     lempinimi: b.lempinimi,
     wiki: b.wiki,
+    kuva: b.kuva,
     kc,
     alkuKc: kcHetkella(historia, Date.parse(ALOITUS)) ?? Math.min(kc, ...historia.map((l) => l.arvo)),
     kcLahde: kcLahde(historia, nyt),

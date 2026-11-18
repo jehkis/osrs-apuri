@@ -12,6 +12,11 @@
   --palkki: #e6dccb;
   --varjo: 0 1px 2px rgb(60 40 10 / 0.06), 0 4px 16px rgb(60 40 10 / 0.05);
   --sade: 12px;
+  --b-mole: #8b6440;
+  --b-sara: #5f8a2e;
+  --b-moon: #4f6bb5;
+  --b-angel: #9b4f93;
+  --b-amox: #2f8ea3;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color-scheme: light;
 }
@@ -30,11 +35,21 @@
     --punainen: #e07a68;
     --palkki: #342c21;
     --varjo: none;
+    --b-mole: #c09468;
+    --b-sara: #94c25e;
+    --b-moon: #8aa2e6;
+    --b-angel: #d38bcb;
+    --b-amox: #6cc4d6;
     color-scheme: dark;
   }
 }
 
 :root[data-theme="dark"] {
+  --b-mole: #c09468;
+  --b-sara: #94c25e;
+  --b-moon: #8aa2e6;
+  --b-angel: #d38bcb;
+  --b-amox: #6cc4d6;
   --tausta: #15120e;
   --pinta: #1f1b15;
   --pinta-2: #29231b;
@@ -169,29 +184,76 @@ button.haamu { background: transparent; color: var(--hiljainen); }
 .virstat li.tehty { background: var(--kulta); color: var(--tausta); }
 .virstat li.seuraava { outline: 1px dashed var(--kulta); color: var(--kulta); }
 
-.uniikkiryhma { display: grid; gap: 4px; align-content: start; }
-.uniikkiryhma h4 { margin: 6px 0 0; font-size: 0.8rem; font-weight: 600; }
-.uniikit { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-.uniikki { padding: 8px 10px; border-radius: 8px; background: var(--pinta-2); display: grid; gap: 4px; }
-.uniikki-rivi { display: flex; align-items: center; gap: 8px; }
-.uniikki .tila {
-  width: 18px; height: 18px; flex: none; border-radius: 50%; border: 1.5px solid var(--reuna);
-  display: grid; place-items: center; font-size: 0.7rem; font-weight: 700;
+.b-giant_mole { --bossi: var(--b-mole); }
+.b-sarachnis { --bossi: var(--b-sara); }
+.b-lunar_chests { --bossi: var(--b-moon); }
+.b-mad_angel { --bossi: var(--b-angel); }
+.b-amoxliatl { --bossi: var(--b-amox); }
+
+/* Viiden osan palkki */
+.osat { margin-top: 12px; padding: 14px 16px; display: grid; gap: 10px; }
+.osapalkki { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.osa { display: block; height: 14px; border-radius: 4px; background: color-mix(in srgb, var(--bossi) 16%, var(--palkki)); overflow: hidden; }
+.osa-taytto { display: block; height: 100%; background: var(--bossi); transition: width 0.4s ease; }
+.osaselite { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.selite { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: inherit; text-decoration: none; min-width: 0; }
+.selite span:nth-child(2) { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.selite .pallo { width: 9px; height: 9px; border-radius: 50%; background: var(--bossi); flex: none; }
+.selite:hover span:nth-child(2) { color: var(--bossi); }
+
+/* Bossikortin kuva ja väri */
+.bossi { border-top: 3px solid var(--bossi); scroll-margin-top: 16px; }
+.bossi-otsikko { align-items: center; }
+.bossi-nimi { flex: 1; min-width: 0; }
+.bossi-kuva {
+  width: 52px; height: 52px; flex: none; border-radius: 10px; overflow: hidden;
+  background: color-mix(in srgb, var(--bossi) 14%, var(--pinta-2));
+  border: 1px solid color-mix(in srgb, var(--bossi) 35%, transparent);
+  display: grid; place-items: center;
 }
-.uniikki.saatu .tila { background: var(--vihrea); border-color: var(--vihrea); color: var(--tausta); }
-.uniikki-nimi { flex: 1; min-width: 0; font-weight: 600; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.uniikki .rate { font-size: 0.8rem; color: var(--hiljainen); font-variant-numeric: tabular-nums; }
-button.pieni { padding: 3px 10px; font-size: 0.8rem; }
-.kuivuus { font-size: 0.78rem; color: var(--hiljainen); font-variant-numeric: tabular-nums; padding-left: 26px; }
+.bossi-kuva img { width: 100%; height: 100%; object-fit: contain; }
+.palkki.bossin > span { background: var(--bossi); }
+
+/* Collection log -ruudukko */
+.kokoelma { display: grid; gap: 8px; }
+.kokoelma-otsikko { display: flex; justify-content: space-between; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--hiljainen); }
+.uniikkiryhma { display: grid; gap: 6px; align-content: start; }
+.uniikkiryhma h4 { margin: 0; font-size: 0.8rem; font-weight: 600; }
+.ruudukko { display: grid; grid-template-columns: repeat(auto-fill, 52px); gap: 6px; }
+.ruutu {
+  position: relative; width: 52px; height: 52px; padding: 6px; border-radius: 8px;
+  background: var(--pinta-2); border: 1px solid var(--reuna); display: grid; place-items: center;
+}
+.ruutu img { max-width: 100%; max-height: 100%; image-rendering: pixelated; filter: grayscale(1) brightness(0.9); opacity: 0.35; transition: opacity 0.2s, filter 0.2s; }
+.ruutu:hover { filter: none; border-color: var(--bossi, var(--kulta)); }
+.ruutu:hover img { opacity: 0.6; }
+.ruutu.saatu { background: color-mix(in srgb, var(--bossi, var(--kulta)) 14%, var(--pinta)); border-color: color-mix(in srgb, var(--bossi, var(--kulta)) 50%, transparent); }
+.ruutu.saatu img { filter: none; opacity: 1; }
+.ruutu.valittu { outline: 2px solid var(--bossi, var(--kulta)); outline-offset: 1px; }
+.ruutu.yli::after { content: ""; position: absolute; top: 4px; right: 4px; width: 6px; height: 6px; border-radius: 50%; background: var(--punainen); }
+.ruutu-pet, .ruutu-maara {
+  position: absolute; bottom: 2px; font-size: 0.6rem; font-weight: 700; line-height: 1; padding: 2px 3px; border-radius: 4px;
+}
+.ruutu-pet { left: 2px; background: var(--kulta-tausta); color: var(--kulta); }
+.ruutu-maara { right: 2px; background: var(--teksti); color: var(--tausta); }
+
+.tiedot-paneeli { display: grid; gap: 8px; padding: 10px 12px; border-radius: 8px; background: var(--pinta-2); }
+.tiedot-otsikko { display: flex; align-items: center; gap: 10px; }
+.tiedot-otsikko > img { width: 32px; height: 32px; object-fit: contain; image-rendering: pixelated; }
+.tiedot-otsikko > div { flex: 1; min-width: 0; font-size: 0.8rem; }
+.tiedot-nimi { font-weight: 650; font-size: 0.95rem; }
+.kuiva { font-size: 0.8rem; color: var(--vihrea); font-variant-numeric: tabular-nums; }
+.kuiva.raja { color: var(--kulta); }
 .kuiva.yli { color: var(--punainen); }
-.saadut { display: flex; gap: 4px; flex-wrap: wrap; padding-left: 26px; }
+button.pieni { padding: 3px 10px; font-size: 0.8rem; }
+.saadut { display: flex; gap: 4px; flex-wrap: wrap; }
 .saatu-kc {
   display: inline-flex; align-items: center; gap: 2px; font-size: 0.75rem; font-weight: 600;
   padding: 1px 2px 1px 8px; border-radius: 99px; background: color-mix(in srgb, var(--vihrea) 18%, transparent); color: var(--vihrea);
   font-variant-numeric: tabular-nums;
 }
 button.poista { background: transparent; color: inherit; padding: 0 6px; font-size: 0.85rem; line-height: 1.2; border-radius: 99px; }
-.kirjaus { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-left: 26px; }
+.kirjaus { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .kirjaus label { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--hiljainen); }
 .kirjaus input {
   font: inherit; width: 7em; padding: 5px 8px; border-radius: 8px;
@@ -207,6 +269,8 @@ button.poista { background: transparent; color: inherit; padding: 0 6px; font-si
 
 /* Dropit ja lähteet */
 .dropit { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.droppi-nimi { display: flex; align-items: center; gap: 8px; }
+.droppi-nimi img { width: 24px; height: 24px; object-fit: contain; image-rendering: pixelated; }
 .dropit li { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 14px; font-size: 0.9rem; }
 .lahteet { margin-top: 32px; display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.8rem; color: var(--hiljainen); }
 .lahteet .virhe { font-size: 0.8rem; }
@@ -224,6 +288,11 @@ button.poista { background: transparent; color: inherit; padding: 0 6px; font-si
 }
 @media (max-width: 820px) {
   .luvut { grid-template-columns: repeat(2, 1fr); }
+  .luku:last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
+@media (max-width: 560px) {
+  .osaselite { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+  .selite span:nth-child(2) { overflow: visible; }
 }
 @media (max-width: 400px) {
   .bossit { grid-template-columns: 1fr; }

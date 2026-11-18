@@ -90,7 +90,7 @@ function lukukortti(nimi, arvo, lisa, luokka = "") {
 function piirraLuvut(y) {
   $("luvut").replaceChildren(
     lukukortti("Yhteensä", [luku(y.kc), el("small", {}, `/ ${luku(y.tavoite)}`)],
-      [palkki(y.osuus), el("span", {}, `${prosentti(y.osuus)} · projektissa +${luku(y.projektissa)}`)], "korostus"),
+      `${prosentti(y.osuus)} · projektissa +${luku(y.projektissa)}`, "korostus"),
     lukukortti("Tahti", y.viikossa === null ? "–" : [luku(y.viikossa, y.viikossa < 10 ? 1 : 0), el("small", {}, "KC/vko")],
       y.viikossa === null ? "Lasketaan, kun historiaa on 3 päivää" : "Viiden bossin yhteistahti, 28 pv"),
     lukukortti("Valmis", y.valmistuu ? kuukausi(y.valmistuu) : "–",
@@ -113,8 +113,21 @@ function virstanpylvaat(b) {
     }));
 }
 
-// Avoinna oleva kirjauslomake: `${bossi}|${esine}`, säilyy uudelleenpiirrossa.
-let avoinLomake = null;
+// Wikin kuvat: esineet täysikokoisina, bossit 120 px:n esikatseluna.
+const KUVAT = "https://oldschool.runescape.wiki/images/";
+const tiedosto = (f) => encodeURIComponent(f.replaceAll(" ", "_"));
+const esineKuva = (f) => KUVAT + tiedosto(f);
+const bossiKuva = (f) => `${KUVAT}thumb/${tiedosto(f)}/120px-${tiedosto(f)}`;
+
+// Valittu uniikki (`${bossi}|${esine}`) ja onko sen kirjauslomake auki. Säilyvät uudelleenpiirrossa.
+let valittu = null;
+let lomakeAuki = false;
+
+function valitse(avain) {
+  valittu = valittu === avain ? null : avain;
+  lomakeAuki = false;
+  piirra(viimeisin);
+}
 
 function kirjauslomake(b, u) {
   const syote = el("input", { type: "number", min: "0", step: "1", value: b.kc, "aria-label": "KC dropin kohdalla" });
@@ -127,7 +140,7 @@ function kirjauslomake(b, u) {
       const nappi = ev.submitter;
       nappi.disabled = true;
       try {
-        avoinLomake = null;
+        lomakeAuki = false;
         piirra(await kutsu("/droppi", { method: "POST", body: JSON.stringify({ bossi: b.id, esine: u.nimi, kc }) }));
         ilmoita(u.pet ? `${u.nimi}! Pet tuli KC:lla ${kc}.` : `${u.nimi} kirjattu KC:lla ${kc}. Grats!`);
       } catch (e) {
@@ -138,7 +151,7 @@ function kirjauslomake(b, u) {
   },
   el("label", {}, "KC", syote),
   el("button", { type: "submit" }, "Tallenna"),
-  el("button", { type: "button", class: "haamu", onclick: () => { avoinLomake = null; piirra(viimeisin); } }, "Peru"));
+  el("button", { type: "button", class: "haamu", onclick: () => { lomakeAuki = false; piirra(viimeisin); } }, "Peru"));
 }
 
 async function poista(d, nappi) {
@@ -152,28 +165,41 @@ async function poista(d, nappi) {
   }
 }
 
-function uniikkirivi(b, u) {
+// Collection log -ruutu: saamaton harmaa, saatu värillinen. Punainen piste = dry yli raten.
+function ruutu(b, u) {
   const avain = `${b.id}|${u.nimi}`;
   const saatu = u.saadut.length > 0;
-  const kuivuus = u.kuivana === 0 ? null : el("span", { class: u.kertaa >= 1 ? "kuiva yli" : "kuiva" },
-    `${saatu ? "Viime dropista" : "Dry"} ${luku(u.kuivana)} KC · ${luku(u.kertaa, 2)}× rate · ${prosentti(u.todennakoisyys)} olisi jo saanut`);
-  return el("li", { class: `uniikki ${saatu ? "saatu" : ""}` },
-    el("div", { class: "uniikki-rivi" },
-      el("span", { class: "tila", "aria-hidden": "true" }, saatu ? "✓" : ""),
-      el("a", { class: "uniikki-nimi linkki", href: WIKI + encodeURIComponent(u.nimi.replaceAll(" ", "_")), target: "_blank", rel: "noopener" },
-        u.nimi),
-      u.pet && el("span", { class: "merkinta kulta" }, "pet"),
-      el("span", { class: "rate", title: u.huomio ?? `Keskimäärin ${harvinaisuus(u.harvinaisuus)} per tappo` },
-        harvinaisuus(u.harvinaisuus)),
-      avoinLomake === avain ? null : el("button", {
-        class: "pieni toissijainen",
-        onclick: () => { avoinLomake = avain; piirra(viimeisin); },
-      }, saatu ? "+1" : "Sain")),
-    u.saadut.length > 0 && el("div", { class: "saadut" },
+  const luokat = ["ruutu", saatu && "saatu", valittu === avain && "valittu", !saatu && u.kertaa >= 1 && "yli"].filter(Boolean);
+  return el("button", {
+    class: luokat.join(" "),
+    title: `${u.nimi} · ${harvinaisuus(u.harvinaisuus)}${saatu ? ` · saatu ${u.saadut.length}×` : ""}`,
+    "aria-label": `${u.nimi}, ${saatu ? `saatu ${u.saadut.length} kertaa` : "ei saatu"}`,
+    "aria-pressed": valittu === avain ? "true" : "false",
+    onclick: () => valitse(avain),
+  },
+  el("img", { src: esineKuva(u.kuva), alt: "", loading: "lazy", decoding: "async" }),
+  u.pet && el("span", { class: "ruutu-pet" }, "pet"),
+  u.saadut.length > 1 && el("span", { class: "ruutu-maara" }, `×${u.saadut.length}`));
+}
+
+function uniikkiTiedot(b, u) {
+  const saatu = u.saadut.length > 0;
+  const kuivaLuokka = u.kertaa >= 2 ? "kuiva yli" : u.kertaa >= 1 ? "kuiva raja" : "kuiva";
+  return el("div", { class: "tiedot-paneeli" },
+    el("div", { class: "tiedot-otsikko" },
+      el("img", { src: esineKuva(u.kuva), alt: "" }),
+      el("div", {},
+        el("a", { class: "linkki tiedot-nimi", href: WIKI + encodeURIComponent(u.nimi.replaceAll(" ", "_")), target: "_blank", rel: "noopener" }, u.nimi),
+        el("div", { class: "hiljainen" },
+          `${harvinaisuus(u.harvinaisuus)}${u.pet ? " · pet" : ""}`, u.huomio && ` · ${u.huomio}`)),
+      !lomakeAuki && el("button", { class: "pieni toissijainen", onclick: () => { lomakeAuki = true; piirra(viimeisin); } },
+        saatu ? "+1" : "Sain")),
+    u.kuivana > 0 && el("div", { class: kuivaLuokka },
+      `${saatu ? "Viime dropista" : "Dry"} ${luku(u.kuivana)} KC · ${luku(u.kertaa, 2)}× rate · ${prosentti(u.todennakoisyys)} olisi jo saanut`),
+    saatu && el("div", { class: "saadut" },
       u.saadut.map((d) => el("span", { class: "saatu-kc" }, `KC ${luku(d.kc)}`,
         el("button", { class: "poista", title: "Poista kirjaus", "aria-label": `Poista ${u.nimi} KC ${d.kc}`, onclick: (ev) => poista(d, ev.currentTarget) }, "×")))),
-    kuivuus && el("div", { class: "kuivuus" }, kuivuus),
-    avoinLomake === avain && kirjauslomake(b, u));
+    lomakeAuki && kirjauslomake(b, u));
 }
 
 function uniikit(b) {
@@ -182,9 +208,16 @@ function uniikit(b) {
     const r = u.ryhma ?? "";
     ryhmat.set(r, [...(ryhmat.get(r) ?? []), u]);
   }
-  return [...ryhmat].map(([nimi, lista]) => el("div", { class: "uniikkiryhma" },
-    nimi && el("h4", {}, nimi, el("span", { class: "hiljainen" }, ` ${lista.filter((u) => u.saadut.length).length}/${lista.length}`)),
-    el("ul", { class: "uniikit" }, lista.map((u) => uniikkirivi(b, u)))));
+  const avattu = b.uniikit.find((u) => valittu === `${b.id}|${u.nimi}`);
+  const saatuja = b.uniikit.filter((u) => u.saadut.length).length;
+  return el("div", { class: "kokoelma" },
+    el("div", { class: "kokoelma-otsikko" },
+      el("span", {}, "Uniikit"), el("span", { class: "numero" }, `${saatuja}/${b.uniikit.length}`)),
+    el("div", { class: ryhmat.size > 1 ? "sarjat" : "" },
+      [...ryhmat].map(([nimi, lista]) => el("div", { class: "uniikkiryhma" },
+        nimi && el("h4", {}, nimi, el("span", { class: "hiljainen" }, ` ${lista.filter((u) => u.saadut.length).length}/${lista.length}`)),
+        el("div", { class: "ruudukko" }, lista.map((u) => ruutu(b, u)))))),
+    avattu && uniikkiTiedot(b, avattu));
 }
 
 function bossikortti(b) {
@@ -193,14 +226,15 @@ function bossikortti(b) {
   const tahti = b.tahti.viikossa === null
     ? "Tahti lasketaan, kun historiaa on 3 päivää"
     : `${luku(b.tahti.viikossa, b.tahti.viikossa < 10 ? 1 : 0)} KC/vko${b.valmistuu && !valmis ? ` · valmis ${kuukausi(b.valmistuu)}` : ""}`;
-  const ryhmitelty = b.uniikit.some((u) => u.ryhma);
-  return el("article", { class: `kortti bossi ${valmis ? "valmis" : ""} ${ryhmitelty ? "levea" : ""}` },
+  const levea = b.uniikit.some((u) => u.ryhma);
+  return el("article", { class: `kortti bossi b-${b.id} ${valmis ? "valmis" : ""} ${levea ? "levea" : ""}`, id: `bossi-${b.id}` },
     el("header", { class: "bossi-otsikko" },
-      el("div", {},
+      el("div", { class: "bossi-kuva" }, el("img", { src: bossiKuva(b.kuva), alt: "", loading: "lazy", decoding: "async" })),
+      el("div", { class: "bossi-nimi" },
         el("h3", {}, el("a", { class: "linkki", href: WIKI + b.wiki, target: "_blank", rel: "noopener" }, b.nimi)),
         el("p", { class: "hiljainen" }, b.lempinimi)),
       el("div", { class: "kc" }, luku(b.kc), el("small", {}, ` / ${luku(TAVOITE)}`))),
-    palkki(b.osuus, valmis ? "valmis" : ""),
+    palkki(b.osuus, valmis ? "valmis" : "bossin"),
     el("div", { class: "bossi-tiedot" },
       el("span", {}, valmis ? "3000 KC valmis!" : `Seuraava ${luku(v.seuraava)}: ${luku(v.puuttuu)} KC`),
       el("span", {}, tahti)),
@@ -208,7 +242,18 @@ function bossikortti(b) {
     virstanpylvaat(b),
     b.id === "lunar_chests" && el("p", { class: "huomio" }, "KC = avatut arkut. Haarniskasarjassa ei tule tuplia, ennen kuin sarja on täysi."),
     lootti(b),
-    ryhmitelty ? el("div", { class: "sarjat" }, uniikit(b)) : uniikit(b));
+    uniikit(b));
+}
+
+// Viiden osan palkki: jokainen bossi on viidennes, täyttö on sen oma osuus 3000:sta.
+function piirraOsat(bossit) {
+  $("osat").replaceChildren(
+    el("div", { class: "osapalkki", role: "img", "aria-label": bossit.map((b) => `${b.lempinimi} ${prosentti(b.osuus)}`).join(", ") },
+      bossit.map((b) => el("a", { class: `osa b-${b.id}`, href: `#bossi-${b.id}`, title: `${b.nimi}: ${luku(b.kc)} / ${luku(TAVOITE)}` },
+        el("span", { class: "osa-taytto", style: `width:${Math.max(b.osuus > 0 ? 1.5 : 0, b.osuus * 100)}%` })))),
+    el("div", { class: "osaselite" },
+      bossit.map((b) => el("a", { class: `selite b-${b.id}`, href: `#bossi-${b.id}` },
+        el("span", { class: "pallo" }), el("span", {}, b.lempinimi), el("span", { class: "numero hiljainen" }, prosentti(b.osuus))))));
 }
 
 // Mistä KC tuli: Dink heti tapon jälkeen, WOM vasta uloskirjautumisen jälkeen.
@@ -232,10 +277,13 @@ function lootti(b) {
       el("li", {}, el("span", {}, `${e.nimi}${e.maara > 1 ? ` ×${luku(e.maara)}` : ""}`), el("span", { class: "numero" }, gp(e.arvo))))));
 }
 
-function piirraDropit(lista) {
+function piirraDropit(lista, bossit) {
+  const kuvat = new Map(bossit.flatMap((b) => b.uniikit.map((u) => [`${b.id}|${u.nimi}`, u.kuva])));
   $("dropit-osio").hidden = lista.length === 0;
   $("dropit").replaceChildren(...lista.map((d) => el("li", { class: "kortti" },
-    el("span", {}, el("strong", {}, d.esine), ` · ${d.bossiNimi}`),
+    el("span", { class: "droppi-nimi" },
+      kuvat.has(`${d.bossi}|${d.esine}`) && el("img", { src: esineKuva(kuvat.get(`${d.bossi}|${d.esine}`)), alt: "" }),
+      el("strong", {}, d.esine), ` · ${d.bossiNimi}`),
     el("span", { class: "hiljainen numero" }, `KC ${luku(d.kc)} · ${paiva(d.aika)}`))));
 }
 
@@ -243,7 +291,7 @@ function piirraLahteet(w) {
   $("lahteet").replaceChildren(...[
     el("span", {}, `WOM päivitetty ${sitten(w.paivitetty)}`),
     w.virhe && el("span", { class: "virhe" }, `Viimeisin virhe: ${w.virhe}`),
-    el("span", {}, "Haku tunnin välein. Dropit kirjataan käsin."),
+    el("span", {}, "WOM tunnin välein, Dink heti tapon jälkeen. Kuvat: OSRS Wiki."),
   ].filter(Boolean));
 }
 
@@ -251,8 +299,9 @@ let viimeisin = null;
 function piirra(t) {
   viimeisin = t;
   piirraLuvut(t.yhteenveto);
+  piirraOsat(t.bossit);
   $("bossit").replaceChildren(...t.bossit.map(bossikortti));
-  piirraDropit(t.viimeisimmat);
+  piirraDropit(t.viimeisimmat, t.bossit);
   piirraLahteet(t.wom);
 }
 
@@ -310,7 +359,7 @@ function nayta(istunto) {
   if (istunto) {
     lataa();
     // Pidä sivu ajan tasalla pelatessa, mutta älä sotke auki olevaa kirjauslomaketta.
-    ajastin = setInterval(() => document.visibilityState === "visible" && !avoinLomake && lataa(), 5 * 60_000);
+    ajastin = setInterval(() => document.visibilityState === "visible" && !lomakeAuki && lataa(), 5 * 60_000);
   }
 }
 
