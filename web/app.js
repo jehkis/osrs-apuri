@@ -3,6 +3,8 @@ import { SUPABASE_AVAIN, SUPABASE_URL, TUNNUS } from "./asetukset.js";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_AVAIN);
 const API = `${SUPABASE_URL}/functions/v1/api`;
+const WIKI = "https://oldschool.runescape.wiki/w/";
+const TAVOITE = 3000;
 const $ = (id) => document.getElementById(id);
 
 // ---------------------------------------------------------------- apurit
@@ -10,7 +12,11 @@ const $ = (id) => document.getElementById(id);
 const luku = (n, desimaalit = 0) =>
   n.toLocaleString("fi-FI", { minimumFractionDigits: desimaalit, maximumFractionDigits: desimaalit });
 
-const tunnit = (h) => (h >= 10 ? `${luku(h)} h` : h >= 1 ? `${luku(h, 1)} h` : `${luku(h * 60)} min`);
+const prosentti = (osuus) => `${luku(osuus * 100, osuus < 0.1 ? 1 : 0)} %`;
+
+const harvinaisuus = (r) => `1/${luku(r, r % 1 ? 1 : 0)}`;
+
+const lyhytKc = (v) => (v >= 1000 ? `${luku(v / 1000, v % 1000 ? 1 : 0)}k` : String(v));
 
 function sitten(iso) {
   if (!iso) return "ei vielä";
@@ -21,9 +27,8 @@ function sitten(iso) {
   return h < 24 ? `${h} h sitten` : `${Math.round(h / 24)} pv sitten`;
 }
 
-function paiva(iso) {
-  return new Date(iso).toLocaleDateString("fi-FI", { day: "numeric", month: "long", year: "numeric" });
-}
+const paiva = (iso) => new Date(iso).toLocaleDateString("fi-FI", { day: "numeric", month: "numeric", year: "numeric" });
+const kuukausi = (iso) => new Date(iso).toLocaleDateString("fi-FI", { month: "short", year: "numeric" });
 
 function el(tag, attrs = {}, ...lapset) {
   const e = document.createElement(tag);
@@ -69,222 +74,152 @@ async function kutsu(polku, valinnat = {}) {
 
 // ---------------------------------------------------------------- piirto
 
-function piirraLuvut(t) {
-  const e = t.tili.ennuste;
-  const p = t.pisteet;
-  const ennusteArvo = e?.maxPaiva
-    ? el("div", { class: "arvo" }, new Date(e.maxPaiva).toLocaleDateString("fi-FI", { month: "short", year: "numeric" }))
-    : el("div", { class: "arvo" }, "–");
-  const ennusteLisa = e?.maxPaiva
-    ? `${luku(e.tahtiViikossa, 1)} h viikossa, ${paiva(e.maxPaiva)}`
-    : `Tahti lasketaan, kun historiaa on 3 päivää${e?.tahdinPohja != null ? ` (nyt ${luku(e.tahdinPohja, 1)} pv)` : ""}`;
+function lukukortti(nimi, arvo, lisa, luokka = "") {
+  return el("div", { class: `kortti luku ${luokka}` },
+    el("div", { class: "nimi" }, nimi), el("div", { class: "arvo" }, arvo), lisa && el("div", { class: "lisa" }, lisa));
+}
 
+function piirraLuvut(y) {
   $("luvut").replaceChildren(
-    el("div", { class: "kortti luku korostus" },
-      el("div", { class: "nimi" }, "Maxiin"),
-      el("div", { class: "arvo" }, t.tili.ttm != null ? luku(t.tili.ttm) : "–", el("small", {}, "h")),
-      el("div", { class: "lisa" }, `${luku(t.tili.ehp ?? 0)} h tehty`)),
-    el("div", { class: "kortti luku" },
-      el("div", { class: "nimi" }, "Max-ennuste"), ennusteArvo, el("div", { class: "lisa" }, ennusteLisa)),
-    el("div", { class: "kortti luku" },
-      el("div", { class: "nimi" }, "Tällä viikolla"),
-      el("div", { class: "arvo" }, e?.viikonTunnit != null ? luku(e.viikonTunnit, 1) : "–", el("small", {}, "h")),
-      el("div", { class: "lisa" }, "Maanantaista klo 05")),
-    el("div", { class: "kortti luku" },
-      el("div", { class: "nimi" }, `Pisteet · taso ${p.taso}`),
-      el("div", { class: "arvo" }, luku(p.kertyneet), el("small", {}, `saldo ${luku(p.saldo)}`)),
-      palkki((p.kertyneet - p.edellinenPalkinto) / (p.seuraavaPalkinto - p.edellinenPalkinto), "ohut"),
-      el("div", { class: "lisa" }, `${luku(p.seuraavaPalkinto - p.kertyneet)} p seuraavaan palkintoon` +
-        (p.seuraavaTaso ? ` · ${luku(p.seuraavaTaso - p.kertyneet)} tasoon ${p.taso + 1}` : ""))),
+    lukukortti("Yhteensä", [luku(y.kc), el("small", {}, `/ ${luku(y.tavoite)}`)],
+      [palkki(y.osuus), el("span", {}, `${prosentti(y.osuus)} · projektissa +${luku(y.projektissa)}`)], "korostus"),
+    lukukortti("Tahti", y.viikossa === null ? "–" : [luku(y.viikossa, y.viikossa < 10 ? 1 : 0), el("small", {}, "KC/vko")],
+      y.viikossa === null ? "Lasketaan, kun historiaa on 3 päivää" : "Viiden bossin yhteistahti, 28 pv"),
+    lukukortti("Valmis", y.valmistuu ? kuukausi(y.valmistuu) : "–",
+      y.valmistuu ? `Hitain bossi, ${paiva(y.valmistuu)}` : "Joka bossilla pitää olla tahti"),
+    lukukortti("Uniikit", [luku(y.uniikkejaSaatu), el("small", {}, `/ ${y.uniikkejaYhteensa}`)], "Eri uniikkia saatu"),
   );
 }
 
-const PALKINTO = {
-  jokeri: { nimi: "Jokeri", selite: "Valitse mikä tahansa skilli kaistalle arvonnan ohi." },
-  vapaapaiva: { nimi: "Vapaapäivä", selite: "Päivä ilman haasteita: tee mitä huvittaa." },
-  bossi_ilta: { nimi: "Bossi-ilta", selite: "Illan bossaus antaa pisteitä kuin skillaus, 10 p EHB-tunnilta." },
-  vaihto: { nimi: "Ilmainen vaihto", selite: "Uusi kolmikko yhdelle kaistalle ilman pistekulua." },
-};
+function virstanpylvaat(b) {
+  const lista = [100, 250, 500, 1000, 1500, 2000, 2500, 3000];
+  return el("ol", { class: "virstat", "aria-label": "Virstanpylväät" },
+    lista.map((v) => {
+      const tehty = b.virstanpylvaat.saavutetut.includes(v);
+      const seuraava = b.virstanpylvaat.seuraava === v;
+      return el("li", { class: tehty ? "tehty" : seuraava ? "seuraava" : "", title: `${v} KC` }, lyhytKc(v));
+    }));
+}
 
-let tila = null; // viimeisin tilanne, kaistan toimintoja varten
+// Avoinna oleva kirjauslomake: `${bossi}|${esine}`, säilyy uudelleenpiirrossa.
+let avoinLomake = null;
 
-function kaistanToiminnot(k) {
-  const p = tila.pisteet;
-  const ilmaisia = tila.palkinnot.varasto.vaihto;
-  const vaihto = el("button", {
-    class: "toissijainen",
-    disabled: ilmaisia === 0 && p.saldo < 100,
-    title: ilmaisia === 0 && p.saldo < 100 ? `Saldo ${p.saldo} / 100` : null,
-    onclick: (ev) => toiminto("/vaihda", { kaista: k.id, ilmainen: ilmaisia > 0 }, ev.currentTarget,
-      ilmaisia > 0 ? "Uusi kolmikko arvottu (ilmainen vaihto)." : "Uusi kolmikko arvottu, −100 p."),
-  }, ilmaisia > 0 ? `Vaihda kolmikko · ilmainen (${ilmaisia})` : "Vaihda kolmikko · 100 p");
+function kirjauslomake(b, u) {
+  const syote = el("input", { type: "number", min: "0", step: "1", value: b.kc, "aria-label": "KC dropin kohdalla" });
+  return el("form", {
+    class: "kirjaus",
+    onsubmit: async (ev) => {
+      ev.preventDefault();
+      const kc = Number(syote.value);
+      if (!Number.isInteger(kc) || kc < 0) return ilmoita("KC:n pitää olla kokonaisluku.");
+      const nappi = ev.submitter;
+      nappi.disabled = true;
+      try {
+        avoinLomake = null;
+        piirra(await kutsu("/droppi", { method: "POST", body: JSON.stringify({ bossi: b.id, esine: u.nimi, kc }) }));
+        ilmoita(u.pet ? `${u.nimi}! Pet tuli KC:lla ${kc}.` : `${u.nimi} kirjattu KC:lla ${kc}. Grats!`);
+      } catch (e) {
+        nappi.disabled = false;
+        ilmoita(`Kirjaus epäonnistui: ${e.message}`);
+      }
+    },
+  },
+  el("label", {}, "KC", syote),
+  el("button", { type: "submit" }, "Tallenna"),
+  el("button", { type: "button", class: "haamu", onclick: () => { avoinLomake = null; piirra(viimeisin); } }, "Peru"));
+}
 
-  const osat = [vaihto, el("span", { class: "vali" })];
-  const jokereita = tila.palkinnot.varasto.jokeri;
-  if (jokereita > 0 && k.id !== "tauko") {
-    const muut = new Set(tila.kaistat.filter((x) => x.id !== k.id && x.aktiivinen).map((x) => x.aktiivinen.kohde));
-    const valinta = el("select", { "aria-label": "Jokerin skilli" },
-      tila.skillit.filter((s) => s.tunnit99 > 0 && s.nimi !== "farming" && !muut.has(s.nimi))
-        .map((s) => el("option", { value: s.nimi }, `${s.otsikko} (${s.taso})`)));
-    osat.push(valinta, el("button", {
-      class: "toissijainen",
-      onclick: (ev) => toiminto("/jokeri", { kaista: k.id, skilli: valinta.value }, ev.currentTarget, "Jokeri käytetty."),
-    }, `Käytä jokeri (${jokereita})`));
+async function poista(d, nappi) {
+  nappi.disabled = true;
+  try {
+    piirra(await kutsu(`/droppi/${d.id}`, { method: "DELETE" }));
+    ilmoita("Kirjaus poistettu.");
+  } catch (e) {
+    nappi.disabled = false;
+    ilmoita(`Poisto epäonnistui: ${e.message}`);
   }
-  return el("div", { class: "kaistan-toiminnot" }, osat);
 }
 
-const ULOTTUVUUS = {
-  opettelu: "Opettelu", maara: "Määrä", nopeus: "Nopeus", rajoitus: "Rajoitus", putki: "Putki",
-};
-
-function tehtavaTeksti(h) {
-  if (h.ulottuvuus === "heikoin") return `Heikoin lenkki: ${h.tehtava}`;
-  return h.tehtava;
+function uniikkirivi(b, u) {
+  const avain = `${b.id}|${u.nimi}`;
+  const saatu = u.saadut.length > 0;
+  const kuivuus = u.kuivana === 0 ? null : el("span", { class: u.kertaa >= 1 ? "kuiva yli" : "kuiva" },
+    `${saatu ? "Viime dropista" : "Dry"} ${luku(u.kuivana)} KC · ${luku(u.kertaa, 2)}× rate · ${prosentti(u.todennakoisyys)} olisi jo saanut`);
+  return el("li", { class: `uniikki ${saatu ? "saatu" : ""}` },
+    el("div", { class: "uniikki-rivi" },
+      el("span", { class: "tila", "aria-hidden": "true" }, saatu ? "✓" : ""),
+      el("a", { class: "uniikki-nimi linkki", href: WIKI + encodeURIComponent(u.nimi.replaceAll(" ", "_")), target: "_blank", rel: "noopener" },
+        u.nimi),
+      u.pet && el("span", { class: "merkinta kulta" }, "pet"),
+      el("span", { class: "rate", title: u.huomio ?? `Keskimäärin ${harvinaisuus(u.harvinaisuus)} per tappo` },
+        harvinaisuus(u.harvinaisuus)),
+      avoinLomake === avain ? null : el("button", {
+        class: "pieni toissijainen",
+        onclick: () => { avoinLomake = avain; piirra(viimeisin); },
+      }, saatu ? "+1" : "Sain")),
+    u.saadut.length > 0 && el("div", { class: "saadut" },
+      u.saadut.map((d) => el("span", { class: "saatu-kc" }, `KC ${luku(d.kc)}`,
+        el("button", { class: "poista", title: "Poista kirjaus", "aria-label": `Poista ${u.nimi} KC ${d.kc}`, onclick: (ev) => poista(d, ev.currentTarget) }, "×")))),
+    kuivuus && el("div", { class: "kuivuus" }, kuivuus),
+    avoinLomake === avain && kirjauslomake(b, u));
 }
 
-// Bossin nimi linkkinä wikiin: opettelussa strategiasivulle.
-function otsikkoLinkki(h, luokka) {
-  return h.linkki
-    ? el("a", { class: `${luokka} linkki`, href: h.linkki, target: "_blank", rel: "noopener" }, h.otsikko)
-    : el("div", { class: luokka }, h.otsikko);
-}
-
-function piirraKaista(k) {
-  const otsikko = el("div", { class: "kaista-otsikko" }, el("h3", {}, k.nimi));
-
-  if (k.aktiivinen) {
-    const a = k.aktiivinen;
-    const tehty = Math.min(a.edistyminen, Number(a.tavoite));
-    const osuus = tehty / Number(a.tavoite);
-    otsikko.append(el("span", { class: "merkinta kulta" }, `+${a.pisteet} p`));
-    const edistys = a.yksikko === "taski"
-      ? (osuus >= 1 ? "Tehty" : "Ei vielä tehty (näkyy, kun WikiSync päivittyy)")
-      : `${luku(tehty)} / ${luku(Number(a.tavoite))} ${a.yksikko}`;
-    const arvio = Number(a.tunnit) > 0 ? ` · arvio ${tunnit(Number(a.tunnit))}` : "";
-    return el("article", { class: "kortti kaista" }, otsikko,
-      el("div", { class: "aktiivinen" },
-        a.yksikko === "XP"
-          ? el("div", { class: "kuvaus" }, `${a.otsikko} ${a.tehtava}`)
-          : el("div", {}, otsikkoLinkki(a, "kuvaus"), el("div", { class: "tehtava" }, a.tehtava)),
-        palkki(osuus, osuus >= 1 ? "valmis" : ""),
-        el("div", { class: "rivi" },
-          el("span", {}, edistys),
-          el("span", {}, `${luku(osuus * 100)} %${arvio}`))));
+function uniikit(b) {
+  const ryhmat = new Map();
+  for (const u of b.uniikit) {
+    const r = u.ryhma ?? "";
+    ryhmat.set(r, [...(ryhmat.get(r) ?? []), u]);
   }
-
-  if (k.tarjolla.length === 0) {
-    return el("article", { class: "kortti kaista" }, otsikko,
-      el("div", { class: "tyhja" }, "Ei vaihtoehtoja vielä. Ne arvotaan, kun tilin data on haettu."));
-  }
-
-  otsikko.append(el("span", { class: "merkinta" }, "Valitse yksi"));
-  return el("article", { class: "kortti kaista" }, otsikko,
-    el("div", { class: "valinta" }, k.tarjolla.map((h) => {
-      return el("div", { class: "vaihtoehto" },
-        el("div", {},
-          otsikkoLinkki(h, "kohde"),
-          el("div", { class: "tehtava" }, tehtavaTeksti(h))),
-        el("div", { class: "tiedot" },
-          ULOTTUVUUS[h.ulottuvuus] ? el("span", { class: "merkinta" }, ULOTTUVUUS[h.ulottuvuus]) : null,
-          Number(h.tunnit) > 0 ? el("span", { class: "merkinta" }, tunnit(Number(h.tunnit))) : null,
-          el("span", { class: "merkinta kulta" }, `+${h.pisteet} p`)),
-        el("button", { onclick: (ev) => valitse(h.id, ev.currentTarget) }, "Valitse"));
-    })),
-    kaistanToiminnot(k));
+  return [...ryhmat].map(([nimi, lista]) => el("div", { class: "uniikkiryhma" },
+    nimi && el("h4", {}, nimi, el("span", { class: "hiljainen" }, ` ${lista.filter((u) => u.saadut.length).length}/${lista.length}`)),
+    el("ul", { class: "uniikit" }, lista.map((u) => uniikkirivi(b, u)))));
 }
 
-function piirraPalkinnot(t) {
-  const pk = t.palkinnot;
-
-  const ilmoitukset = [];
-  if (pk.vapaapaiva) ilmoitukset.push([el("strong", {}, "Vapaapäivä tänään."), " Tee mitä huvittaa, haasteet odottavat huomiseen."]);
-  if (pk.bossiIlta) {
-    const loppu = new Date(pk.bossiIlta.loppu).toLocaleTimeString("fi-FI", { hour: "2-digit", minute: "2-digit" });
-    ilmoitukset.push([el("strong", {}, "Bossi-ilta käynnissä"), ` klo ${loppu} asti · +${pk.bossiIlta.pisteet} p tähän mennessä.`]);
-  }
-  $("tila-ilmoitus").hidden = ilmoitukset.length === 0;
-  $("tila-ilmoitus").replaceChildren(...ilmoitukset.flatMap((i, n) => (n ? [el("br"), ...i] : i)));
-
-  const odottava = pk.odottavat[0];
-  $("palkinto-osio").hidden = !odottava;
-  if (odottava) {
-    $("palkinto-otsikko").textContent = pk.odottavat.length > 1
-      ? `Palkinto odottaa (${pk.odottavat.length} jonossa)` : `Palkinto odottaa · ${odottava.kynnys} p`;
-    $("palkintovalinta").replaceChildren(...odottava.vaihtoehdot.map((tyyppi) =>
-      el("div", { class: "palkinto" },
-        el("div", {}, el("div", { class: "nimi" }, PALKINTO[tyyppi].nimi), el("div", { class: "selite" }, PALKINTO[tyyppi].selite)),
-        el("button", {
-          onclick: (ev) => toiminto("/palkinto", { arvonta: odottava.id, tyyppi }, ev.currentTarget, `${PALKINTO[tyyppi].nimi} talteen.`),
-        }, "Valitse"))));
-  }
-
-  const rivit = Object.entries(pk.varasto).filter(([, n]) => n > 0).map(([tyyppi, n]) => {
-    let toimi = null;
-    if (tyyppi === "vapaapaiva") {
-      toimi = el("button", { class: "toissijainen", disabled: pk.vapaapaiva,
-        onclick: (ev) => toiminto("/kayta", { tyyppi }, ev.currentTarget, "Vapaapäivä alkoi.") }, "Käytä tänään");
-    } else if (tyyppi === "bossi_ilta") {
-      toimi = el("button", { class: "toissijainen", disabled: !!pk.bossiIlta,
-        onclick: (ev) => toiminto("/kayta", { tyyppi }, ev.currentTarget, "Bossi-ilta alkoi. Onnea dropeille!") }, "Aloita nyt");
-    } else {
-      toimi = el("span", { class: "ohje" }, "Käytä kaistan kortissa");
-    }
-    return el("div", { class: "kortti varasto-rivi" },
-      el("div", {}, el("div", {}, PALKINTO[tyyppi].nimi, " ", el("span", { class: "maara" }, `×${n}`))),
-      toimi);
-  });
-  $("varasto-osio").hidden = rivit.length === 0;
-  $("varasto").replaceChildren(...rivit);
+function bossikortti(b) {
+  const valmis = b.kc >= TAVOITE;
+  const v = b.virstanpylvaat;
+  const tahti = b.tahti.viikossa === null
+    ? "Tahti lasketaan, kun historiaa on 3 päivää"
+    : `${luku(b.tahti.viikossa, b.tahti.viikossa < 10 ? 1 : 0)} KC/vko${b.valmistuu && !valmis ? ` · valmis ${kuukausi(b.valmistuu)}` : ""}`;
+  const ryhmitelty = b.uniikit.some((u) => u.ryhma);
+  return el("article", { class: `kortti bossi ${valmis ? "valmis" : ""} ${ryhmitelty ? "levea" : ""}` },
+    el("header", { class: "bossi-otsikko" },
+      el("div", {},
+        el("h3", {}, el("a", { class: "linkki", href: WIKI + b.wiki, target: "_blank", rel: "noopener" }, b.nimi)),
+        el("p", { class: "hiljainen" }, b.lempinimi)),
+      el("div", { class: "kc" }, luku(b.kc), el("small", {}, ` / ${luku(TAVOITE)}`))),
+    palkki(b.osuus, valmis ? "valmis" : ""),
+    el("div", { class: "bossi-tiedot" },
+      el("span", {}, valmis ? "3000 KC valmis!" : `Seuraava ${luku(v.seuraava)}: ${luku(v.puuttuu)} KC`),
+      el("span", {}, tahti)),
+    virstanpylvaat(b),
+    b.id === "lunar_chests" && el("p", { class: "huomio" }, "KC = avatut arkut. Haarniskasarjassa ei tule tuplia, ennen kuin sarja on täysi."),
+    ryhmitelty ? el("div", { class: "sarjat" }, uniikit(b)) : uniikit(b));
 }
 
-function piirraSkillit(t) {
-  const aktiiviset = new Set(t.kaistat.flatMap((k) => (k.aktiivinen ? [k.aktiivinen.kohde] : [])));
-  const suurin = Math.max(...t.skillit.map((s) => s.tunnit99), 1);
-  $("skillit").replaceChildren(...t.skillit.map((s) => {
-    const maxattu = s.taso >= 99;
-    const alempi = maxattu ? "99 ✓" : s.bonus ? "Nousee bonuksena" : `${tunnit(s.tunnit99)} 99:ään`;
-    return el("div", { class: `kortti skilli${maxattu ? " maxattu" : ""}${aktiiviset.has(s.nimi) ? " aktiivinen-skilli" : ""}` },
-      el("div", { class: "ylin" }, el("span", { class: "nimi" }, s.otsikko), el("span", { class: "taso" }, s.taso)),
-      palkki(maxattu ? 1 : s.tunnit99 / suurin, `ohut${maxattu ? " valmis" : ""}`),
-      el("div", { class: "tunnit" }, alempi));
-  }));
+function piirraDropit(lista) {
+  $("dropit-osio").hidden = lista.length === 0;
+  $("dropit").replaceChildren(...lista.map((d) => el("li", { class: "kortti" },
+    el("span", {}, el("strong", {}, d.esine), ` · ${d.bossiNimi}`),
+    el("span", { class: "hiljainen numero" }, `KC ${luku(d.kc)} · ${paiva(d.aika)}`))));
 }
 
-function piirraOpettelu(t) {
-  const o = t.opettelu;
-  $("opettelu-osio").hidden = o.polku.length === 0;
-  $("opettelu-lisa").textContent =
-    `Osaamistaso ${o.osaamistaso}/5${o.caTehty != null ? ` · ${luku(o.caTehty)} CA-taskia tehty` : ""}`;
-  $("polku").replaceChildren(...o.polku.map((b, i) =>
-    el("li", { class: `kortti polku-rivi${b.este ? " lukittu" : ""}` },
-      el("span", { class: "jarjestys" }, String(i + 1)),
-      el("div", { class: "polku-nimi" },
-        el("a", { class: "linkki", href: b.linkki, target: "_blank", rel: "noopener" }, b.nimi),
-        el("div", { class: "lisa" }, b.este ?? (b.kc === 0 ? "Ei vielä killejä" : `${b.kc} / 10 KC`))),
-      el("span", { class: "merkinta" }, `Porras ${b.porras}`))));
+function piirraLahteet(w) {
+  $("lahteet").replaceChildren(...[
+    el("span", {}, `WOM päivitetty ${sitten(w.paivitetty)}`),
+    w.virhe && el("span", { class: "virhe" }, `Viimeisin virhe: ${w.virhe}`),
+    el("span", {}, "Haku tunnin välein. Dropit kirjataan käsin."),
+  ].filter(Boolean));
 }
 
+let viimeisin = null;
 function piirra(t) {
-  tila = t;
-  piirraLuvut(t);
-  piirraPalkinnot(t);
-  piirraOpettelu(t);
-  $("kaistat").replaceChildren(...t.kaistat.map(piirraKaista));
-  piirraSkillit(t);
-
-  $("valmiit-osio").hidden = t.valmiit.length === 0;
-  $("valmiit").replaceChildren(...t.valmiit.map((v) =>
-    el("li", { class: "kortti" },
-      el("span", {}, v.kuvaus.replace(/ \(noin .*\)$/, "")),
-      el("span", { class: "pisteet" }, `+${v.pisteet} p`))));
-
-  $("lahteet").replaceChildren(...t.lahteet.filter((l) => l.paivitetty || l.virhe).map((l) =>
-    el("span", {}, `${l.id.toUpperCase()}: päivitetty ${sitten(l.paivitetty)}`,
-      l.virhe ? el("span", { class: "virhe" }, ` · virhe: ${l.virhe}`) : null)));
+  viimeisin = t;
+  piirraLuvut(t.yhteenveto);
+  $("bossit").replaceChildren(...t.bossit.map(bossikortti));
+  piirraDropit(t.viimeisimmat);
+  piirraLahteet(t.wom);
 }
-
-// ---------------------------------------------------------------- toiminnot
 
 async function lataa() {
   try {
@@ -294,27 +229,7 @@ async function lataa() {
   }
 }
 
-async function valitse(id, nappi) {
-  nappi.disabled = true;
-  try {
-    piirra(await kutsu("/valitse", { method: "POST", body: JSON.stringify({ id }) }));
-    ilmoita("Haaste valittu. Onnea grindiin!");
-  } catch (e) {
-    nappi.disabled = false;
-    ilmoita(`Valinta epäonnistui: ${e.message}`);
-  }
-}
-
-async function toiminto(polku, runko, nappi, viesti) {
-  nappi.disabled = true;
-  try {
-    piirra(await kutsu(polku, { method: "POST", body: JSON.stringify(runko) }));
-    ilmoita(viesti);
-  } catch (e) {
-    nappi.disabled = false;
-    ilmoita(`Ei onnistunut: ${e.message}`);
-  }
-}
+// ---------------------------------------------------------------- tapahtumat
 
 $("paivita").addEventListener("click", async (ev) => {
   const nappi = ev.currentTarget;
@@ -323,9 +238,7 @@ $("paivita").addEventListener("click", async (ev) => {
   try {
     const r = await kutsu("/paivita", { method: "POST" });
     piirra(r.tilanne);
-    ilmoita(r.valmistuneet > 0
-      ? `${r.valmistuneet} haaste${r.valmistuneet > 1 ? "tta" : ""} valmistui!`
-      : r.kirjattu > 0 ? `${r.kirjattu} mittaria päivittyi.` : "Ei uutta dataa.");
+    ilmoita(r.kirjattu > 0 ? `${r.kirjattu} mittaria päivittyi.` : "Ei uutta dataa.");
   } catch (e) {
     ilmoita(`Päivitys epäonnistui: ${e.message}`);
   } finally {
@@ -361,8 +274,8 @@ function nayta(istunto) {
   clearInterval(ajastin);
   if (istunto) {
     lataa();
-    // Pidä sivu ajan tasalla pelatessa: haku viiden minuutin välein, kun välilehti on näkyvissä.
-    ajastin = setInterval(() => document.visibilityState === "visible" && lataa(), 5 * 60_000);
+    // Pidä sivu ajan tasalla pelatessa, mutta älä sotke auki olevaa kirjauslomaketta.
+    ajastin = setInterval(() => document.visibilityState === "visible" && !avoinLomake && lataa(), 5 * 60_000);
   }
 }
 

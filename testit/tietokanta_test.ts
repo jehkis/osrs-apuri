@@ -1,10 +1,17 @@
-// Ajaa mittarimigraation PGlitessä (Postgres WASM:na) ja testaa kirjaa_lukemat-funktion.
-// Ajastusmigraatio jätetään pois: pg_cron, pg_net ja Vault ovat vain Supabasessa.
+// Ajaa migraatiot PGlitessä (Postgres WASM:na): mittarit, vanhat max cape -taulut ja
+// bossiprojekti, joka poistaa ne. Ajastusmigraatio jätetään pois: pg_cron, pg_net ja
+// Vault ovat vain Supabasessa.
 
 import { assertEquals } from "jsr:@std/assert@1.0.8";
 import { PGlite } from "npm:@electric-sql/pglite@0.2.17";
 
-const MIGRAATIOT = ["20261115000001_mittarit.sql", "20261115000003_haasteet.sql"]
+const MIGRAATIOT = [
+  "20261115000001_mittarit.sql",
+  "20261115000003_haasteet.sql",
+  "20261115000004_palkinnot.sql",
+  "20261115000005_tauko.sql",
+  "20261118000001_bossiprojekti.sql",
+]
   .map((m) => new URL(`../supabase/migrations/${m}`, import.meta.url));
 
 async function kanta() {
@@ -67,58 +74,28 @@ Deno.test("onnistunut haku päivittää lähteen ja nollaa virheen", async () =>
   await db.close();
 });
 
-async function kolmikko(db: PGlite) {
-  await db.exec(`
-    insert into arvonta (kaista, siemen) values ('skilli1', 1);
-    insert into haaste (kaista, arvonta, kohde, ulottuvuus, mittari, alkuarvo, tavoite, tavoitetaso, tunnit, pisteet, kuvaus) values
-      ('skilli1', 1, 'agility',  'tunnit',      'xp:agility',  1000, 500, null, 0.5, 5, 'a'),
-      ('skilli1', 1, 'mining',   'tasotavoite', 'xp:mining',   2000, 300, 80,   0.6, 6, 'b'),
-      ('skilli1', 1, 'fishing',  'tunnit',      'xp:fishing',  3000, 700, null, 0.7, 7, 'c');`);
-}
-
-Deno.test("valinta aktivoi yhden, hylkää muut ja painottaa ohitettuja", async () => {
+Deno.test("bossiprojekti poistaa max cape -taulut ja -funktiot", async () => {
   const db = await kanta();
-  await kolmikko(db);
-  await db.query("select valitse_haaste(2, 2100)");
-  const h = await db.query<{ id: number; tila: string; alkuarvo: string; tavoite: string }>(
-    "select id, tila, alkuarvo, tavoite from haaste order by id");
-  assertEquals(h.rows.map((r) => r.tila), ["hylatty", "aktiivinen", "hylatty"]);
-  // Tasotavoite pysyy samassa absoluuttisessa XP:ssä (2300), vaikka XP nousi välissä.
-  assertEquals([Number(h.rows[1].alkuarvo), Number(h.rows[1].tavoite)], [2100, 200]);
-  const p = await db.query<{ kohde: string; lisa: string }>("select kohde, lisa from arvontapaino order by kohde");
-  assertEquals(p.rows.map((r) => [r.kohde, Number(r.lisa)]), [["agility", 0.25], ["fishing", 0.25], ["mining", 0]]);
-  const a = await db.query<{ valittu: boolean }>("select valittu is not null as valittu from arvonta");
-  assertEquals(a.rows[0].valittu, true);
+  const t = await db.query<{ n: string }>(
+    "select table_name as n from information_schema.tables where table_schema = 'public' order by 1",
+  );
+  assertEquals(t.rows.map((r) => r.n), ["droppi", "lahde", "mittari_nyt", "mittarilukema"]);
+  const f = await db.query<{ n: string }>(
+    "select routine_name as n from information_schema.routines where routine_schema = 'public' order by 1",
+  );
+  assertEquals(f.rows.map((r) => r.n), ["kirjaa_lukemat", "kirjaa_virhe"]);
   await db.close();
 });
 
-Deno.test("tuntihaasteen alkuarvo päivittyy, tavoite pysyy", async () => {
+Deno.test("droppi sallii saman esineen monesti mutta ei negatiivista KC:ta", async () => {
   const db = await kanta();
-  await kolmikko(db);
-  await db.query("select valitse_haaste(1, 1200)");
-  const r = await db.query<{ alkuarvo: string; tavoite: string }>("select alkuarvo, tavoite from haaste where id = 1");
-  assertEquals([Number(r.rows[0].alkuarvo), Number(r.rows[0].tavoite)], [1200, 500]);
-  await db.close();
-});
-
-Deno.test("valmistuminen kirjaa pisteet vain kerran", async () => {
-  const db = await kanta();
-  await kolmikko(db);
-  await db.query("select valitse_haaste(3, 3000)");
-  const eka = await db.query<{ ok: boolean }>("select merkitse_valmiiksi(3) as ok");
-  const toka = await db.query<{ ok: boolean }>("select merkitse_valmiiksi(3) as ok");
-  assertEquals([eka.rows[0].ok, toka.rows[0].ok], [true, false]);
-  const p = await db.query<{ n: number; s: number }>("select count(*)::int as n, sum(pisteet)::int as s from pistetapahtuma");
-  assertEquals(p.rows[0], { n: 1, s: 7 });
-  await db.close();
-});
-
-Deno.test("jo valittua kolmikkoa ei voi valita uudelleen", async () => {
-  const db = await kanta();
-  await kolmikko(db);
-  await db.query("select valitse_haaste(1, 1000)");
+  await db.exec(`insert into droppi (bossi, esine, kc) values
+    ('mad_angel', 'Hallowfell', 40), ('mad_angel', 'Hallowfell', 200);`);
+  const n = await db.query<{ n: number }>("select count(*)::int as n from droppi");
+  assertEquals(n.rows[0].n, 2);
   let virhe = "";
-  try { await db.query("select valitse_haaste(2, 2000)"); } catch (e) { virhe = String(e); }
-  assertEquals(virhe.includes("ei ole tarjolla"), true);
+  try { await db.exec("insert into droppi (bossi, esine, kc) values ('sarachnis', 'Jar of eyes', -1)"); }
+  catch (e) { virhe = String(e); }
+  assertEquals(virhe.includes("check"), true);
   await db.close();
 });

@@ -1,23 +1,18 @@
 // Käyttöliittymän rajapinta. Vaatii kirjautuneen käyttäjän; rekisteröityminen on
 // suljettu, joten ainoa tunnus on omistajan.
 //
-//   GET  /api/tilanne          etusivun kaikki tiedot
-//   POST /api/valitse {id}     valitse haaste kolmikosta
-//   POST /api/paivita          hae WOM nyt ja tarkista haasteet
-//   POST /api/vaihda {kaista, ilmainen}       uusi kolmikko (100 p tai ilmainen vaihto)
-//   POST /api/jokeri {kaista, skilli}         valittu skilli suoraan aktiiviseksi
-//   POST /api/palkinto {arvonta, tyyppi}      valitse palkinto avauksesta
-//   POST /api/kayta {tyyppi}                  vapaapäivä tai bossi-ilta käyttöön
+//   GET    /api/tilanne                       etusivun kaikki tiedot
+//   POST   /api/paivita                       hae WOM nyt
+//   POST   /api/droppi {bossi, esine, kc?}    kirjaa uniikki (kc oletuksena nykyinen)
+//   DELETE /api/droppi/<id>                   poista väärin kirjattu
 
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
-import {
-  jokeri, kaytaPalkinto, paivitaWom, tilanne, vaihda, valitse, valitsePalkinto, varmistaKolmikot, varmistaPalkinnot,
-} from "../_jaettu/palvelu.ts";
+import { kirjaaDroppi, paivitaWom, poistaDroppi, tilanne } from "../_jaettu/palvelu.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
 };
 
 const vastaa = (data: unknown, status = 200) =>
@@ -36,41 +31,27 @@ Deno.serve(async (req) => {
   const reitti = new URL(req.url).pathname.replace(/^.*\/api/, "") || "/";
   try {
     if (req.method === "GET" && reitti === "/tilanne") {
-      await varmistaPalkinnot(db);
-      await varmistaKolmikot(db);
-      return vastaa(await tilanne(db));
-    }
-    if (req.method === "POST" && ["/vaihda", "/jokeri", "/palkinto", "/kayta"].includes(reitti)) {
-      const b = await req.json();
-      const kaista = ["skilli1", "skilli2", "tauko"].includes(b.kaista) ? b.kaista : null;
-      if (reitti === "/vaihda") {
-        if (!kaista) return vastaa({ virhe: "kaista puuttuu" }, 400);
-        await vaihda(db, kaista, b.ilmainen === true);
-      } else if (reitti === "/jokeri") {
-        // Jokeri on skillikaistoille: taukokaistalla opettelupolku hoitaa valinnan.
-        if (!kaista || kaista === "tauko" || typeof b.skilli !== "string") {
-          return vastaa({ virhe: "jokeri vaatii skillikaistan ja skillin" }, 400);
-        }
-        await jokeri(db, kaista, b.skilli);
-      } else if (reitti === "/palkinto") {
-        if (!Number.isInteger(b.arvonta) || typeof b.tyyppi !== "string") return vastaa({ virhe: "arvonta tai tyyppi puuttuu" }, 400);
-        await valitsePalkinto(db, b.arvonta, b.tyyppi);
-      } else {
-        if (typeof b.tyyppi !== "string") return vastaa({ virhe: "tyyppi puuttuu" }, 400);
-        await kaytaPalkinto(db, b.tyyppi);
-      }
-      await varmistaKolmikot(db);
-      return vastaa(await tilanne(db));
-    }
-    if (req.method === "POST" && reitti === "/valitse") {
-      const { id } = await req.json();
-      if (!Number.isInteger(id)) return vastaa({ virhe: "id puuttuu" }, 400);
-      await valitse(db, id);
       return vastaa(await tilanne(db));
     }
     if (req.method === "POST" && reitti === "/paivita") {
       const tulos = await paivitaWom(db, Deno.env.get("OSRS_RSN") ?? "zei_kill");
       return vastaa({ ...tulos, tilanne: await tilanne(db) });
+    }
+    if (req.method === "POST" && reitti === "/droppi") {
+      const b = await req.json();
+      if (typeof b.bossi !== "string" || typeof b.esine !== "string") {
+        return vastaa({ virhe: "bossi tai esine puuttuu" }, 400);
+      }
+      if (b.kc !== undefined && (!Number.isInteger(b.kc) || b.kc < 0)) {
+        return vastaa({ virhe: "KC:n pitää olla kokonaisluku ≥ 0" }, 400);
+      }
+      await kirjaaDroppi(db, b.bossi, b.esine, b.kc);
+      return vastaa(await tilanne(db));
+    }
+    const poisto = reitti.match(/^\/droppi\/(\d+)$/);
+    if (req.method === "DELETE" && poisto) {
+      await poistaDroppi(db, Number(poisto[1]));
+      return vastaa(await tilanne(db));
     }
     return vastaa({ virhe: "tuntematon reitti" }, 404);
   } catch (e) {

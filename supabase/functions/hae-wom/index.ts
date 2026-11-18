@@ -1,5 +1,5 @@
 // Ajastettu WOM-haku: pg_cron kutsuu tätä tunnin välein (migraatio 20261115000002).
-// Hakee tilin datan, päivittää EHP-tahdit ja tarkistaa haasteet.
+// Hakee tilin datan WOM:sta ja kirjaa muuttuneet mittarit.
 
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { paivitaWom } from "../_jaettu/palvelu.ts";
