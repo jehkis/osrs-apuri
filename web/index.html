@@ -50,6 +50,9 @@
       </div>
     </header>
 
+    <!-- Kaksi näkymää: yleisnäkymä (#) ja yhden bossin näkymä (#bossi/<id>).
+         Vain toinen näkyy kerrallaan; app.js vaihtaa niitä jQueryn fadeIn/fadeOut-efekteillä. -->
+    <div id="yleisnakyma">
     <section class="luvut" id="luvut" aria-label="Yhteenveto"></section>
 
     <section class="kortti osat" id="osat" aria-label="Bossien osuudet"></section>
@@ -65,6 +68,9 @@
       <h2>Viimeisimmät dropit</h2>
       <ul class="dropit" id="dropit"></ul>
     </section>
+    </div>
+
+    <section id="bossinakyma" class="bossinakyma" aria-live="polite" style="display: none"></section>
 
     <footer class="lahteet" id="lahteet"></footer>
   </div>

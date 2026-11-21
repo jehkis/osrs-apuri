@@ -340,3 +340,35 @@ button.poista { background: transparent; color: inherit; padding: 0 6px; font-si
   .luku .arvo { font-size: 1.4rem; }
   .toiminnot button { padding: 8px 10px; }
 }
+
+/* ---------------------------------------------------------------- Projekti 3: näkymät */
+
+/* Kompakti bossikortti yleisnäkymässä: koko kortti on klikattava. */
+.bossi.kompakti { cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease; }
+.bossi.kompakti:hover { transform: translateY(-2px); box-shadow: 0 6px 20px color-mix(in srgb, var(--bossi) 25%, transparent); }
+.bossi.kompakti:focus-visible { outline: 2px solid var(--bossi); outline-offset: 2px; }
+.mini-uniikit { display: flex; gap: 4px; flex-wrap: wrap; }
+.mini-uniikit img { width: 22px; height: 22px; object-fit: contain; image-rendering: pixelated; filter: grayscale(1); opacity: 0.3; }
+.mini-uniikit img.saatu { filter: none; opacity: 1; }
+.kompakti-ala { display: flex; justify-content: space-between; gap: 8px; font-size: 0.8rem; color: var(--hiljainen); }
+.kompakti-ala .avaa { color: var(--bossi); font-weight: 600; }
+
+/* Bossinäkymä */
+.bossinakyma { margin-top: 20px; }
+.takaisin { display: inline-block; margin-bottom: 12px; color: var(--hiljainen); font-weight: 600; text-decoration: none; }
+.takaisin:hover { color: var(--kulta); }
+.bossinakyma .bossi-kuva { width: 72px; height: 72px; }
+.bossinakyma .bossi-otsikko h3 { font-size: 1.4rem; }
+
+/* Bootstrapin välilehdet omilla väreillä. */
+.nav-tabs {
+  --bs-nav-link-color: var(--hiljainen);
+  --bs-nav-link-hover-color: var(--teksti);
+  --bs-nav-tabs-border-color: var(--reuna);
+  --bs-nav-tabs-link-hover-border-color: var(--reuna) var(--reuna) var(--reuna);
+  --bs-nav-tabs-link-active-color: var(--bossi, var(--kulta));
+  --bs-nav-tabs-link-active-bg: var(--pinta);
+  --bs-nav-tabs-link-active-border-color: var(--reuna) var(--reuna) var(--pinta);
+  margin-top: 6px;
+}
+.tab-content { padding-top: 12px; }

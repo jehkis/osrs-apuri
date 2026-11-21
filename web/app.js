@@ -211,16 +211,6 @@ $("#kirjaus-lomake").on("submit", async function (ev) {
   }
 });
 
-async function poista(d, nappi) {
-  nappi.disabled = true;
-  try {
-    piirra(await kutsu(`/droppi/${d.id}`, { method: "DELETE" }));
-    ilmoita("Kirjaus poistettu.");
-  } catch (e) {
-    nappi.disabled = false;
-    ilmoita(`Poisto epäonnistui: ${e.message}`);
-  }
-}
 
 // Collection log -ruutu: saamaton harmaa, saatu värillinen. Punainen piste = dry yli raten.
 function ruutu(b, u) {
@@ -232,7 +222,7 @@ function ruutu(b, u) {
     title: `${u.nimi} · ${harvinaisuus(u.harvinaisuus)}${saatu ? ` · saatu ${u.saadut.length}×` : ""}`,
     "aria-label": `${u.nimi}, ${saatu ? `saatu ${u.saadut.length} kertaa` : "ei saatu"}`,
     "aria-pressed": valittu === avain ? "true" : "false",
-    onclick: () => valitse(avain),
+    "data-avain": avain, // delegoitu kuuntelija lukee tämän: $(this).data("avain")
   },
   el("img", { src: esineKuva(u.kuva), alt: "", loading: "lazy", decoding: "async" }),
   u.pet && el("span", { class: "ruutu-pet" }, "pet"),
@@ -249,12 +239,12 @@ function uniikkiTiedot(b, u) {
         el("a", { class: "linkki tiedot-nimi", href: WIKI + encodeURIComponent(u.nimi.replaceAll(" ", "_")), target: "_blank", rel: "noopener" }, u.nimi),
         el("div", { class: "hiljainen" },
           `${harvinaisuus(u.harvinaisuus)}${u.pet ? " · pet" : ""}`, u.huomio && ` · ${u.huomio}`)),
-      el("button", { class: "btn btn-sm btn-outline-warning", onclick: () => avaaKirjaus(b, u) }, saatu ? "+1" : "Sain")),
+      el("button", { class: "btn btn-sm btn-outline-warning kirjaa", "data-avain": `${b.id}|${u.nimi}` }, saatu ? "+1" : "Sain")),
     u.kuivana > 0 && el("div", { class: kuivaLuokka },
       `${saatu ? "Viime dropista" : "Dry"} ${luku(u.kuivana)} KC · ${luku(u.kertaa, 2)}× rate · ${prosentti(u.todennakoisyys)} olisi jo saanut`),
     saatu && el("div", { class: "saadut" },
       u.saadut.map((d) => el("span", { class: "saatu-kc" }, `KC ${luku(d.kc)}`,
-        el("button", { class: "poista", title: "Poista kirjaus", "aria-label": `Poista ${u.nimi} KC ${d.kc}`, onclick: (ev) => poista(d, ev.currentTarget) }, "×")))),
+        el("button", { class: "poista", title: "Poista kirjaus", "aria-label": `Poista ${u.nimi} KC ${d.kc}`, "data-id": d.id }, "×")))),
   );
 }
 
@@ -276,39 +266,187 @@ function uniikit(b) {
     avattu && uniikkiTiedot(b, avattu));
 }
 
-function bossikortti(b) {
+// Bossin otsikko: kuva, nimi, lempinimi ja KC. Yhteinen kompaktille kortille ja bossinäkymälle.
+// wikiin: nimi on linkki wikiin (vain bossinäkymässä, koska kompaktin kortin klikkaus avaa näkymän).
+function bossiOtsikko(b, wikiin) {
+  return el("header", { class: "bossi-otsikko" },
+    el("div", { class: "bossi-kuva" }, el("img", { src: bossiKuva(b.kuva), alt: "", loading: "lazy", decoding: "async" })),
+    el("div", { class: "bossi-nimi" },
+      el("h3", {}, wikiin ? el("a", { class: "linkki", href: WIKI + b.wiki, target: "_blank", rel: "noopener" }, b.nimi) : b.nimi),
+      el("p", { class: "hiljainen" }, b.lempinimi)),
+    el("div", { class: "kc" }, luku(b.kc), el("small", {}, ` / ${luku(TAVOITE)}`)));
+}
+
+// Seuraava virstanpylväs ja tahti yhdellä rivillä.
+function bossiTiedot(b) {
   const valmis = b.kc >= TAVOITE;
   const v = b.virstanpylvaat;
   const tahti = b.tahti.viikossa === null
     ? "Tahti lasketaan, kun historiaa on 3 päivää"
     : `${luku(b.tahti.viikossa, b.tahti.viikossa < 10 ? 1 : 0)} KC/vko${b.valmistuu && !valmis ? ` · valmis ${kuukausi(b.valmistuu)}` : ""}`;
-  const levea = b.uniikit.some((u) => u.ryhma);
-  return el("article", { class: `kortti bossi b-${b.id} ${valmis ? "valmis" : ""} ${levea ? "levea" : ""}`, id: `bossi-${b.id}` },
-    el("header", { class: "bossi-otsikko" },
-      el("div", { class: "bossi-kuva" }, el("img", { src: bossiKuva(b.kuva), alt: "", loading: "lazy", decoding: "async" })),
-      el("div", { class: "bossi-nimi" },
-        el("h3", {}, el("a", { class: "linkki", href: WIKI + b.wiki, target: "_blank", rel: "noopener" }, b.nimi)),
-        el("p", { class: "hiljainen" }, b.lempinimi)),
-      el("div", { class: "kc" }, luku(b.kc), el("small", {}, ` / ${luku(TAVOITE)}`))),
-    palkki(b.osuus, valmis ? "valmis" : "bossin"),
-    el("div", { class: "bossi-tiedot" },
-      el("span", {}, valmis ? "3000 KC valmis!" : `Seuraava ${luku(v.seuraava)}: ${luku(v.puuttuu)} KC`),
-      el("span", {}, tahti)),
-    kcLahde(b),
-    virstanpylvaat(b),
-    b.id === "lunar_chests" && el("p", { class: "huomio" }, "KC = avatut arkut. Haarniskasarjassa ei tule tuplia, ennen kuin sarja on täysi."),
-    lootti(b),
-    uniikit(b));
+  return el("div", { class: "bossi-tiedot" },
+    el("span", {}, valmis ? "3000 KC valmis!" : `Seuraava ${luku(v.seuraava)}: ${luku(v.puuttuu)} KC`),
+    el("span", {}, tahti));
 }
+
+// Yleisnäkymän tiivis kortti. Koko kortti on klikattava (delegoitu kuuntelija alempana),
+// ja data-bossi kertoo kuuntelijalle, mikä bossi avataan.
+function bossiKompakti(b) {
+  const valmis = b.kc >= TAVOITE;
+  const saatuja = b.uniikit.filter((u) => u.saadut.length).length;
+  return el("article", {
+    class: `kortti bossi kompakti b-${b.id} ${valmis ? "valmis" : ""}`,
+    id: `bossi-${b.id}`, "data-bossi": b.id, tabindex: "0", role: "link", "aria-label": `Avaa ${b.nimi}`,
+  },
+  bossiOtsikko(b, false),
+  palkki(b.osuus, valmis ? "valmis" : "bossin"),
+  bossiTiedot(b),
+  el("div", { class: "mini-uniikit", "aria-hidden": "true" },
+    b.uniikit.map((u) => el("img", { class: u.saadut.length ? "saatu" : "", src: esineKuva(u.kuva), alt: "", loading: "lazy" }))),
+  el("div", { class: "kompakti-ala" },
+    el("span", {}, `Uniikit ${saatuja}/${b.uniikit.length}${b.lootti ? ` · ${gp(b.lootti.arvo)} gp` : ""}`),
+    el("span", { class: "avaa" }, "Avaa →")));
+}
+
+// Bossinäkymän aktiivinen välilehti. Säilyy, kun sivu piirretään uudelleen (5 min välein).
+let valilehti = "uniikit";
+
+// Bootstrapin välilehdet (nav-tabs + tab-content). Bootstrapin JavaScript vaihtaa välilehteä
+// data-bs-toggle="tab" -napeista; app.js vain piirtää rakenteen.
+function valilehdet(b) {
+  const lehdet = [
+    ["uniikit", "Uniikit", uniikit(b)],
+    ["lootti", "Lootti", lootti(b)],
+  ];
+  return el("div", { class: "valilehdet" },
+    el("ul", { class: "nav nav-tabs", role: "tablist" }, lehdet.map(([id, nimi]) =>
+      el("li", { class: "nav-item", role: "presentation" },
+        el("button", {
+          class: `nav-link ${valilehti === id ? "active" : ""}`, type: "button", role: "tab",
+          "data-bs-toggle": "tab", "data-bs-target": `#vl-${id}`, "data-valilehti": id,
+          "aria-controls": `vl-${id}`, "aria-selected": valilehti === id ? "true" : "false",
+        }, nimi)))),
+    el("div", { class: "tab-content" }, lehdet.map(([id, , sisalto]) =>
+      el("div", { class: `tab-pane fade ${valilehti === id ? "show active" : ""}`, id: `vl-${id}`, role: "tabpanel" }, sisalto))));
+}
+
+// Yhden bossin näkymä: kaikki tiedot ja välilehdet.
+function bossiTarkka(b) {
+  const valmis = b.kc >= TAVOITE;
+  return el("div", {},
+    el("a", { class: "takaisin", href: "#" }, "← Kaikki bossit"),
+    el("article", { class: `kortti bossi b-${b.id} ${valmis ? "valmis" : ""}` },
+      bossiOtsikko(b, true),
+      palkki(b.osuus, valmis ? "valmis" : "bossin"),
+      bossiTiedot(b),
+      kcLahde(b),
+      virstanpylvaat(b),
+      b.id === "lunar_chests" && el("p", { class: "huomio" }, "KC = avatut arkut. Haarniskasarjassa ei tule tuplia, ennen kuin sarja on täysi."),
+      valilehdet(b)));
+}
+
+// ---------------------------------------------------------------- näkymät (#bossi/<id>)
+
+// Osoitteen #-osa kertoo näkymän: "#bossi/giant_mole" = bossinäkymä, muuten yleisnäkymä.
+// Näin selaimen Takaisin-nappi toimii ja bossin näkymään voi linkittää suoraan.
+const nykyinenBossi = () => location.hash.match(/^#bossi\/(.+)$/)?.[1] ?? null;
+let edellinenBossi = null;
+
+// Näyttää oikean näkymän. animoi = true, kun käyttäjä vaihtoi näkymää (ei 5 min päivityksessä).
+function piirraNakyma(animoi) {
+  if (!viimeisin) return;
+  const id = nykyinenBossi();
+  const b = viimeisin.bossit.find((x) => x.id === id);
+  if (id && !b) {               // tuntematon bossi osoitteessa → yleisnäkymään
+    location.hash = "";
+    return;
+  }
+  if (b) $("#bossinakyma").empty().append(bossiTarkka(b));
+  const $nayta = b ? $("#bossinakyma") : $("#yleisnakyma");
+  const $piilota = b ? $("#yleisnakyma") : $("#bossinakyma");
+  if (!animoi) {
+    $piilota.hide();
+    $nayta.show();
+    return;
+  }
+  // Jos edellinen vaihto on vielä kesken (nopea tuplaklikkaus), keskeytetään se. stop(true)
+  // tyhjentää animaatiojonon EIKÄ aja kesken jääneen fadeOutin callbackia, joten vanha vaihto
+  // ei enää näytä väärää näkymää.
+  $("#yleisnakyma, #bossinakyma").stop(true);
+  // fadeOut → (kun valmis) fadeIn.
+  $piilota.fadeOut(150, () => {
+    $nayta.fadeIn(200);
+    // Takaisin yleisnäkymään: vieritä sen bossin kortin kohdalle, josta tultiin.
+    const $kortti = !b && edellinenBossi ? $(`#bossi-${edellinenBossi}`) : $();
+    window.scrollTo(0, $kortti.length ? $kortti.offset().top - 16 : 0);
+    edellinenBossi = id;
+  });
+}
+
+// hashchange: osoitteen #-osa muuttui (linkki, Takaisin-nappi tai location.hash = ...).
+$(window).on("hashchange", () => {
+  valittu = null;
+  piirraNakyma(true);
+});
+
+// ---------------------------------------------------------------- delegoidut kuuntelijat
+// Kortit ja ruudut piirretään uudelleen joka päivityksessä, joten kuuntelijat liitetään
+// kerran vanhempaan (#bossit, #bossinakyma), joka pysyy. jQuery: .on(tapahtuma, valitsin, käsittelijä).
+
+// Kompaktin kortin klikkaus tai Enter avaa bossinäkymän.
+$("#bossit").on("click", ".bossi", function () {
+  location.hash = `bossi/${$(this).data("bossi")}`;
+});
+$("#bossit").on("keydown", ".bossi", function (ev) {
+  if (ev.key === "Enter" || ev.key === " ") {
+    ev.preventDefault();
+    $(this).trigger("click");
+  }
+});
+
+// Etsii bossin ja uniikin avaimella "bossi|esine".
+function etsiUniikki(avain) {
+  const [bossi, esine] = avain.split("|");
+  const b = viimeisin.bossit.find((x) => x.id === bossi);
+  return { b, u: b?.uniikit.find((x) => x.nimi === esine) };
+}
+
+// Uniikkiruudun klikkaus avaa tai sulkee sen tiedot.
+$("#bossinakyma").on("click", ".ruutu", function () {
+  valitse(String($(this).data("avain")));
+});
+
+// "Sain" / "+1" avaa kirjausmodaalin.
+$("#bossinakyma").on("click", ".kirjaa", function () {
+  const { b, u } = etsiUniikki(String($(this).data("avain")));
+  if (b && u) avaaKirjaus(b, u);
+});
+
+// "×" poistaa dropin kirjauksen.
+$("#bossinakyma").on("click", ".poista", async function () {
+  const $nappi = $(this).prop("disabled", true);
+  try {
+    piirra(await kutsu(`/droppi/${$nappi.data("id")}`, { method: "DELETE" }));
+    ilmoita("Kirjaus poistettu.");
+  } catch (e) {
+    $nappi.prop("disabled", false);
+    ilmoita(`Poisto epäonnistui: ${e.message}`);
+  }
+});
+
+// Bootstrapin tapahtuma shown.bs.tab: muistetaan valittu välilehti.
+$("#bossinakyma").on("shown.bs.tab", "[data-bs-toggle=tab]", function () {
+  valilehti = $(this).data("valilehti");
+});
 
 // Viiden osan palkki: jokainen bossi on viidennes, täyttö on sen oma osuus 3000:sta.
 function piirraOsat(bossit) {
   $("#osat").empty().append(
     el("div", { class: "osapalkki", role: "img", "aria-label": bossit.map((b) => `${b.lempinimi} ${prosentti(b.osuus)}`).join(", ") },
-      bossit.map((b) => el("a", { class: `osa b-${b.id}`, href: `#bossi-${b.id}`, title: `${b.nimi}: ${luku(b.kc)} / ${luku(TAVOITE)}` },
+      bossit.map((b) => el("a", { class: `osa b-${b.id}`, href: `#bossi/${b.id}`, title: `${b.nimi}: ${luku(b.kc)} / ${luku(TAVOITE)}` },
         el("span", { class: "osa-taytto", style: `width:${Math.max(b.osuus > 0 ? 1.5 : 0, b.osuus * 100)}%` })))),
     el("div", { class: "osaselite" },
-      bossit.map((b) => el("a", { class: `selite b-${b.id}`, href: `#bossi-${b.id}` },
+      bossit.map((b) => el("a", { class: `selite b-${b.id}`, href: `#bossi/${b.id}` },
         el("span", { class: "pallo" }), el("span", {}, b.lempinimi), el("span", { class: "numero hiljainen" }, prosentti(b.osuus))))));
 }
 
@@ -359,9 +497,10 @@ function piirra(t) {
   piirraLuvut(t.yhteenveto);
   piirraOsat(t.bossit);
   piirraKassa(t.kassa, t.bossit);
-  $("#bossit").empty().append(t.bossit.map(bossikortti));
+  $("#bossit").empty().append(t.bossit.map(bossiKompakti));
   piirraDropit(t.viimeisimmat, t.bossit);
   piirraLahteet(t.wom);
+  piirraNakyma(false);
 }
 
 async function lataa() {
