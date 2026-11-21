@@ -60,21 +60,32 @@ function ilmoita(teksti) {
 
 // ---------------------------------------------------------------- rajapinta
 
+// Kaikki palvelinkutsut kulkevat tämän kautta. AJAX-pyyntö tehdään jQueryn $.ajaxilla.
+// polku: esim. "/tilanne", valinnat: { method: "POST", body: JSON-merkkijono }.
 async function kutsu(polku, valinnat = {}) {
+  // Kirjautumisen tunniste (JWT) Supabasesta; palvelin tarkistaa sen joka pyynnöllä.
   const { data } = await supabase.auth.getSession();
   if (!data.session) throw new Error("kirjaudu sisään");
-  const v = await fetch(`${API}${polku}`, {
-    ...valinnat,
-    headers: { Authorization: `Bearer ${data.session.access_token}`, "Content-Type": "application/json" },
-  });
-  const json = await v.json().catch(() => ({}));
-  if (v.status === 401) {
-    await supabase.auth.signOut();
-    nayta(null);
-    throw new Error("istunto vanheni, kirjaudu uudelleen");
+  try {
+    // $.ajax palauttaa jqXHR-olion, jota voi odottaa awaitilla kuten Promisea.
+    return await $.ajax({
+      url: API + polku,
+      method: valinnat.method ?? "GET",
+      data: valinnat.body,               // lähetettävä data (valmiiksi JSON-merkkijono)
+      contentType: "application/json",   // kertoo palvelimelle, että data on JSONia
+      dataType: "json",                  // jQuery muuttaa vastauksen JS-olioksi itse
+      headers: { Authorization: `Bearer ${data.session.access_token}` },
+    });
+  } catch (xhr) {
+    // Toisin kuin fetch, jQuery hylkää virhestatukset (4xx/5xx), joten ne tulevat tänne.
+    if (xhr.status === 401) {
+      await supabase.auth.signOut();
+      nayta(null);
+      throw new Error("istunto vanheni, kirjaudu uudelleen");
+    }
+    // responseJSON on palvelimen virheviesti JSONina, jos sellainen tuli. Status 0 = ei yhteyttä.
+    throw new Error(xhr.responseJSON?.virhe ?? (xhr.status ? `palvelin vastasi ${xhr.status}` : "ei yhteyttä palvelimeen"));
   }
-  if (!v.ok) throw new Error(json.virhe ?? `palvelin vastasi ${v.status}`);
-  return json;
 }
 
 // ---------------------------------------------------------------- piirto
