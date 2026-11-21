@@ -316,6 +316,8 @@ let valilehti = "uniikit";
 function valilehdet(b) {
   const lehdet = [
     ["uniikit", "Uniikit", uniikit(b)],
+    ["kayra", "KC-käyrä", el("div", { class: "kayra" },
+      el("canvas", { id: "kc-kaavio", role: "img", "aria-label": `${b.nimi}: KC:n kehitys viimeiset 28 päivää` }))],
     ["lootti", "Lootti", lootti(b)],
   ];
   return el("div", { class: "valilehdet" },
@@ -345,6 +347,93 @@ function bossiTarkka(b) {
       valilehdet(b)));
 }
 
+// ---------------------------------------------------------------- KC-käyrä (Chart.js)
+
+// Nykyinen Chart-olio. Vanha pitää tuhota (destroy) ennen uutta, muuten Chart.js varoittaa,
+// että canvas on jo käytössä, ja vanhat tapahtumakuuntelijat jäävät muistiin.
+let kaavio = null;
+
+// Piirtää bossin KC:n kehityksen viivakaaviona. Data tulee palvelimelta (b.kayra: [{ aika, kc }]).
+// animoi = false automaattisessa päivityksessä, jotta kaavio ei "hyppää" 5 minuutin välein.
+function piirraKaavio(b, animoi) {
+  kaavio?.destroy();
+  kaavio = null;
+  const $canvas = $("#kc-kaavio");
+  if (!b || !$canvas.length) return;
+  // ?? [] suojaa, jos palvelin on vanhempi versio eikä vielä palauta käyrää.
+  if ((b.kayra ?? []).length < 2) {
+    $canvas.parent().empty().append(el("p", { class: "huomio" }, "Käyrä piirretään, kun KC-historiaa kertyy."));
+    return;
+  }
+  // Värit CSS-muuttujista, jotta kaavio seuraa bossin väriä sekä vaaleaa ja tummaa teemaa.
+  const css = getComputedStyle($canvas.closest(".bossi")[0]);
+  const vari = (nimi) => css.getPropertyValue(nimi).trim();
+  const bossinVari = vari("--bossi");
+  const pisteet = b.kayra.map((p) => ({ x: Date.parse(p.aika), y: p.kc }));
+  const seuraava = b.virstanpylvaat.seuraava;
+  const ensimmainen = pisteet[0].x;
+  const viimeinen = pisteet.at(-1).x;
+  const pvm = (ms) => new Date(ms).toLocaleDateString("fi-FI", { day: "numeric", month: "numeric" });
+
+  kaavio = new Chart($canvas[0], {
+    type: "line",
+    data: {
+      datasets: [
+        {
+          label: "KC",
+          data: pisteet,
+          borderColor: bossinVari,
+          backgroundColor: `${bossinVari}26`, // sama väri läpinäkyvänä (hex + alfa)
+          fill: true,
+          stepped: true,                       // KC nousee portaittain tapoista
+          pointRadius: 0,
+          pointHitRadius: 8,
+          borderWidth: 2,
+        },
+        // Katkoviiva seuraavan virstanpylvään kohdalla: näkee, kuinka paljon on matkaa.
+        seuraava && {
+          label: `Seuraava virstanpylväs ${luku(seuraava)}`,
+          data: [{ x: ensimmainen, y: seuraava }, { x: viimeinen, y: seuraava }],
+          borderColor: vari("--kulta"),
+          borderDash: [6, 4],
+          borderWidth: 1.5,
+          pointRadius: 0,
+          fill: false,
+        },
+      ].filter(Boolean),
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,              // korkeus tulee CSS:stä (.kayra)
+      animation: animoi ? { duration: 700 } : false,
+      interaction: { mode: "index", intersect: false },
+      scales: {
+        x: {
+          type: "linear",                      // aika millisekunteina; päivämäärä muotoillaan itse
+          min: ensimmainen,
+          max: viimeinen,
+          ticks: { callback: pvm, maxTicksLimit: 7, color: vari("--hiljainen") },
+          grid: { color: vari("--reuna") },
+        },
+        y: {
+          ticks: { precision: 0, color: vari("--hiljainen") },
+          grid: { color: vari("--reuna") },
+        },
+      },
+      plugins: {
+        legend: { labels: { color: vari("--hiljainen"), boxWidth: 12 } },
+        tooltip: {
+          callbacks: {
+            title: (rivit) => new Date(rivit[0].parsed.x).toLocaleString("fi-FI",
+              { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }),
+            label: (rivi) => `${rivi.dataset.label}: ${luku(rivi.parsed.y)}`,
+          },
+        },
+      },
+    },
+  });
+}
+
 // ---------------------------------------------------------------- näkymät (#bossi/<id>)
 
 // Osoitteen #-osa kertoo näkymän: "#bossi/giant_mole" = bossinäkymä, muuten yleisnäkymä.
@@ -362,6 +451,7 @@ function piirraNakyma(animoi) {
     return;
   }
   if (b) $("#bossinakyma").empty().append(bossiTarkka(b));
+  piirraKaavio(b, animoi); // canvas on nyt sivulla (tai poistui, jolloin vanha kaavio tuhotaan)
   const $nayta = b ? $("#bossinakyma") : $("#yleisnakyma");
   const $piilota = b ? $("#yleisnakyma") : $("#bossinakyma");
   if (!animoi) {

@@ -159,6 +159,30 @@ export function kcHetkella(historia: Lukema[], hetki: number): number | null {
   return tulos;
 }
 
+// KC-käyrä kaaviota varten: piste aina, kun KC nousi (enintään yksi piste tunnissa, jotta
+// Dinkin tappokohtaiset lukemat eivät paisuta vastausta), ja lopuksi nykyhetki. Ikkunaa
+// vanhemmat lukemat siirretään ikkunan alkuun, jotta käyrä alkaa siitä.
+export function kcKayra(historia: Lukema[], nyt: number, ikkunaPv = TAHTI_IKKUNA_PV): { aika: string; kc: number }[] {
+  const alku = nyt - ikkunaPv * PAIVA;
+  const jarjestetty = historia
+    .map((l) => ({ hetki: Math.max(Date.parse(l.aika), alku), arvo: l.arvo }))
+    .filter((l) => l.hetki <= nyt)
+    .sort((a, b) => a.hetki - b.hetki);
+  const pisteet: { tunti: number; hetki: number; kc: number }[] = [];
+  let suurin = -Infinity;
+  for (const l of jarjestetty) {
+    if (l.arvo <= suurin) continue; // KC ei voi laskea: vanhentunut hiscore-lukema ohitetaan
+    suurin = l.arvo;
+    const tunti = Math.floor(l.hetki / 3_600_000);
+    const viimeinen = pisteet.at(-1);
+    if (viimeinen && viimeinen.tunti === tunti) viimeinen.kc = suurin;
+    else pisteet.push({ tunti, hetki: l.hetki, kc: suurin });
+  }
+  if (pisteet.length === 0) return [];
+  pisteet.push({ tunti: 0, hetki: nyt, kc: suurin });
+  return pisteet.map((p) => ({ aika: new Date(p.hetki).toISOString(), kc: p.kc }));
+}
+
 export interface Tahti {
   viikossa: number | null; // KC viikossa, null kun historiaa ei ole tarpeeksi
   pohjaPv: number; // montako päivää historiaa tahti kattaa
@@ -245,6 +269,7 @@ export interface BossinTila {
   kcLahde: { lahde: string; aika: string } | null;
   osuus: number; // kc / TAVOITE, enintään 1
   virstanpylvaat: ReturnType<typeof virstanpylvaat>;
+  kayra: { aika: string; kc: number }[];
   tahti: Tahti;
   valmistuu: string | null;
   uniikit: UniikinTila[];
@@ -270,6 +295,7 @@ export function bossinTila(
     kcLahde: kcLahde(historia, nyt),
     osuus: Math.min(1, kc / TAVOITE),
     virstanpylvaat: virstanpylvaat(kc),
+    kayra: kcKayra(historia, nyt),
     tahti: t,
     valmistuu: valmistuu(kc, t.viikossa, nyt),
     uniikit: b.uniikit.map((u) => uniikinTila(u, kc, omat)),

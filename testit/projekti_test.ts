@@ -1,6 +1,6 @@
 import { assertAlmostEquals, assertEquals } from "jsr:@std/assert@1.0.8";
 import {
-  BOSSIT, bossinTila, kcHetkella, kcLahde, onUniikki, tahti, uniikinTila, valmistuu, virstanpylvaat, yhteenveto,
+  BOSSIT, bossinTila, kcHetkella, kcKayra, kcLahde, onUniikki, tahti, uniikinTila, valmistuu, virstanpylvaat, yhteenveto,
 } from "../supabase/functions/_jaettu/projekti.ts";
 
 const PAIVA = 86_400_000;
@@ -92,4 +92,22 @@ Deno.test("KC:n lähde on lukema, joka nosti KC:n nykyiseen arvoon", () => {
   ];
   assertEquals(kcLahde(h, NYT), { lahde: "events", aika: pv(1) });
   assertEquals(kcLahde([], NYT), null);
+});
+
+Deno.test("KC-käyrä: nousevat pisteet, tunnin niputus, ikkunan alku ja nykyhetki", () => {
+  const tunti = 3_600_000;
+  const historia = [
+    { arvo: 10, aika: pv(40) },                                   // ikkunaa vanhempi → ikkunan alkuun
+    { arvo: 20, aika: pv(5) },
+    { arvo: 21, aika: new Date(NYT - 5 * PAIVA + 60_000).toISOString() }, // sama tunti → yhdistetään
+    { arvo: 15, aika: pv(3) },                                     // vanhentunut hiscore → ohitetaan
+    { arvo: 30, aika: new Date(NYT - tunti).toISOString() },
+  ];
+  assertEquals(kcKayra(historia, NYT), [
+    { aika: pv(28), kc: 10 },
+    { aika: pv(5), kc: 21 },
+    { aika: new Date(NYT - tunti).toISOString(), kc: 30 },
+    { aika: new Date(NYT).toISOString(), kc: 30 },
+  ]);
+  assertEquals(kcKayra([], NYT), []);
 });

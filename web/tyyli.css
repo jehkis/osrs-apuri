@@ -159,7 +159,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--kulta); out
   content: ""; position: absolute; inset: 8px 7px 9px;
   background: var(--tausta); clip-path: polygon(50% 0, 100% 100%, 0 100%);
 }
-.toiminnot { display: flex; gap: 8px; }
+.toiminnot { display: flex; gap: 8px; align-items: center; }
 
 /* Luvut */
 .luvut { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 20px; }
@@ -372,3 +372,10 @@ button.poista { background: transparent; color: inherit; padding: 0 6px; font-si
   margin-top: 6px;
 }
 .tab-content { padding-top: 12px; }
+
+/* KC-käyrä: Chart.js täyttää tämän laatikon (maintainAspectRatio: false). */
+.kayra { position: relative; height: 280px; }
+@media (max-width: 600px) { .kayra { height: 220px; } }
+/* Grid-solu ei oletuksena kutistu sisältöään kapeammaksi (min-width: auto), jolloin canvas
+   venyttäisi kortin yli puhelimen reunan. minmax(0, 1fr) sallii kutistumisen. */
+.bossi { grid-template-columns: minmax(0, 1fr); }
