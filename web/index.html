@@ -25,10 +25,12 @@
       <h1>OSRS-bossiprojekti</h1>
       <p class="hiljainen">Viisi bossia, 3000 KC kullekin.</p>
       <input type="email" name="username" autocomplete="username" hidden>
-      <label>Salasana
-        <input id="salasana" type="password" autocomplete="current-password" required>
-      </label>
-      <button type="submit">Kirjaudu</button>
+      <!-- Bootstrapin lomakeluokat: form-label, form-control ja btn. -->
+      <div>
+        <label for="salasana" class="form-label">Salasana</label>
+        <input id="salasana" class="form-control" type="password" autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="btn btn-warning">Kirjaudu</button>
       <p id="kirjautumisvirhe" class="virhe" role="alert"></p>
     </form>
   </main>
@@ -43,8 +45,8 @@
         </div>
       </div>
       <div class="toiminnot">
-        <button id="paivita" class="toissijainen">Päivitä nyt</button>
-        <button id="ulos" class="haamu">Kirjaudu ulos</button>
+        <button id="paivita" class="btn btn-sm btn-outline-warning">Päivitä nyt</button>
+        <button id="ulos" class="btn btn-sm btn-link">Kirjaudu ulos</button>
       </div>
     </header>
 
@@ -67,7 +69,36 @@
     <footer class="lahteet" id="lahteet"></footer>
   </div>
 
-  <!-- Piilotettu inline-tyylillä (ei hidden-attribuutilla), jotta jQueryn fadeIn/fadeOut toimivat. -->
-  <div id="ilmoitus" class="ilmoitus" role="status" style="display: none"></div>
+  <!-- Bootstrapin modaali-ikkuna dropin kirjaukseen. app.js täyttää esineen tiedot ennen avaamista. -->
+  <div class="modal fade" id="kirjaus" tabindex="-1" aria-labelledby="kirjaus-otsikko" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+      <form class="modal-content" id="kirjaus-lomake">
+        <div class="modal-header">
+          <img id="kirjaus-kuva" class="kirjaus-kuva" src="" alt="">
+          <h3 class="modal-title fs-6" id="kirjaus-otsikko">Kirjaa droppi</h3>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Sulje"></button>
+        </div>
+        <div class="modal-body">
+          <label for="kirjaus-kc" class="form-label">KC dropin kohdalla</label>
+          <input id="kirjaus-kc" class="form-control" type="number" min="0" step="1" required>
+          <div class="form-text" id="kirjaus-ohje"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-link" data-bs-dismiss="modal">Peru</button>
+          <button type="submit" class="btn btn-warning">Tallenna</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Bootstrapin toast-ilmoitus sivun alareunassa. -->
+  <div class="toast-container position-fixed bottom-0 start-50 translate-middle-x p-3">
+    <div id="ilmoitus" class="toast align-items-center" role="status" aria-live="polite" aria-atomic="true">
+      <div class="d-flex">
+        <div class="toast-body"></div>
+        <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast" aria-label="Sulje"></button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

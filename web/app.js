@@ -52,10 +52,13 @@ function el(tag, attrs = {}, ...lapset) {
 const palkki = (osuus, luokka = "") =>
   el("div", { class: `palkki ${luokka}` }, el("span", { style: `width:${Math.min(100, Math.max(0, osuus * 100))}%` }));
 
-// Ilmoitus häivytetään esiin ja pois jQueryn efekteillä. stop(true) keskeyttää edellisen
-// ilmoituksen animaation, jotta uusi ilmoitus ei jää jonoon. delay korvaa setTimeoutin.
+// Ilmoitus näytetään Bootstrapin toastina. Teksti asetetaan jQuerylla, ja Bootstrapin
+// JavaScript-olio (bootstrap.Toast) hoitaa näyttämisen ja piilotuksen 4 sekunnin päästä.
+// Bootstrap haluaa tavallisen DOM-elementin, joten jQuery-oliosta otetaan [0].
 function ilmoita(teksti) {
-  $("#ilmoitus").stop(true, true).text(teksti).fadeIn(200).delay(4000).fadeOut(400);
+  const $toast = $("#ilmoitus");
+  $toast.find(".toast-body").text(teksti);
+  bootstrap.Toast.getOrCreateInstance($toast[0], { delay: 4000 }).show();
 }
 
 // ---------------------------------------------------------------- rajapinta
@@ -162,40 +165,51 @@ const esineKuva = (f) => KUVAT + tiedosto(f);
 const bossiKuva = (f) => `${KUVAT}thumb/${tiedosto(f)}/120px-${tiedosto(f)}`;
 const KOLIKOT = `${KUVAT}thumb/Coins_detail.png/320px-Coins_detail.png`;
 
-// Valittu uniikki (`${bossi}|${esine}`) ja onko sen kirjauslomake auki. Säilyvät uudelleenpiirrossa.
+// Valittu uniikki (`${bossi}|${esine}`). Säilyy uudelleenpiirrossa.
 let valittu = null;
-let lomakeAuki = false;
 
 function valitse(avain) {
   valittu = valittu === avain ? null : avain;
-  lomakeAuki = false;
   piirra(viimeisin);
 }
 
-function kirjauslomake(b, u) {
-  const syote = el("input", { type: "number", min: "0", step: "1", value: b.kc, "aria-label": "KC dropin kohdalla" });
-  return el("form", {
-    class: "kirjaus",
-    onsubmit: async (ev) => {
-      ev.preventDefault();
-      const kc = Number(syote.value);
-      if (!Number.isInteger(kc) || kc < 0) return ilmoita("KC:n pitää olla kokonaisluku.");
-      const nappi = ev.submitter;
-      nappi.disabled = true;
-      try {
-        lomakeAuki = false;
-        piirra(await kutsu("/droppi", { method: "POST", body: JSON.stringify({ bossi: b.id, esine: u.nimi, kc }) }));
-        ilmoita(u.pet ? `${u.nimi}! Pet tuli KC:lla ${kc}.` : `${u.nimi} kirjattu KC:lla ${kc}. Grats!`);
-      } catch (e) {
-        nappi.disabled = false;
-        ilmoita(`Kirjaus epäonnistui: ${e.message}`);
-      }
-    },
-  },
-  el("label", {}, "KC", syote),
-  el("button", { type: "submit" }, "Tallenna"),
-  el("button", { type: "button", class: "haamu", onclick: () => { lomakeAuki = false; piirra(viimeisin); } }, "Peru"));
+// ---------------------------------------------------------------- kirjaus (Bootstrap-modaali)
+
+// Mitä ollaan kirjaamassa: { b: bossi, u: uniikki }. Asetetaan, kun modaali avataan.
+let kirjattava = null;
+const kirjausIkkuna = () => bootstrap.Modal.getOrCreateInstance($("#kirjaus")[0]);
+const kirjausAuki = () => $("#kirjaus").hasClass("show");
+
+// Täyttää modaalin esineen tiedoilla jQuerylla ja avaa sen.
+function avaaKirjaus(b, u) {
+  kirjattava = { b, u };
+  $("#kirjaus-otsikko").text(u.nimi);
+  $("#kirjaus-kuva").attr("src", esineKuva(u.kuva));
+  $("#kirjaus-kc").val(b.kc);
+  $("#kirjaus-ohje").text(`${b.nimi}, nykyinen KC ${luku(b.kc)}`);
+  kirjausIkkuna().show();
 }
+
+// Kun modaali on avautunut, kursori KC-kenttään. shown.bs.modal on Bootstrapin oma tapahtuma.
+$("#kirjaus").on("shown.bs.modal", () => $("#kirjaus-kc").trigger("focus").trigger("select"));
+
+// Lomakkeen lähetys: tarkistus, AJAX-kutsu ja modaalin sulkeminen.
+$("#kirjaus-lomake").on("submit", async function (ev) {
+  ev.preventDefault();
+  const { b, u } = kirjattava;
+  const kc = Number($("#kirjaus-kc").val());
+  if (!Number.isInteger(kc) || kc < 0) return ilmoita("KC:n pitää olla kokonaisluku.");
+  const $nappi = $(this).find("button[type=submit]").prop("disabled", true);
+  try {
+    piirra(await kutsu("/droppi", { method: "POST", body: JSON.stringify({ bossi: b.id, esine: u.nimi, kc }) }));
+    kirjausIkkuna().hide();
+    ilmoita(u.pet ? `${u.nimi}! Pet tuli KC:lla ${kc}.` : `${u.nimi} kirjattu KC:lla ${kc}. Grats!`);
+  } catch (e) {
+    ilmoita(`Kirjaus epäonnistui: ${e.message}`);
+  } finally {
+    $nappi.prop("disabled", false);
+  }
+});
 
 async function poista(d, nappi) {
   nappi.disabled = true;
@@ -235,14 +249,13 @@ function uniikkiTiedot(b, u) {
         el("a", { class: "linkki tiedot-nimi", href: WIKI + encodeURIComponent(u.nimi.replaceAll(" ", "_")), target: "_blank", rel: "noopener" }, u.nimi),
         el("div", { class: "hiljainen" },
           `${harvinaisuus(u.harvinaisuus)}${u.pet ? " · pet" : ""}`, u.huomio && ` · ${u.huomio}`)),
-      !lomakeAuki && el("button", { class: "pieni toissijainen", onclick: () => { lomakeAuki = true; piirra(viimeisin); } },
-        saatu ? "+1" : "Sain")),
+      el("button", { class: "btn btn-sm btn-outline-warning", onclick: () => avaaKirjaus(b, u) }, saatu ? "+1" : "Sain")),
     u.kuivana > 0 && el("div", { class: kuivaLuokka },
       `${saatu ? "Viime dropista" : "Dry"} ${luku(u.kuivana)} KC · ${luku(u.kertaa, 2)}× rate · ${prosentti(u.todennakoisyys)} olisi jo saanut`),
     saatu && el("div", { class: "saadut" },
       u.saadut.map((d) => el("span", { class: "saatu-kc" }, `KC ${luku(d.kc)}`,
         el("button", { class: "poista", title: "Poista kirjaus", "aria-label": `Poista ${u.nimi} KC ${d.kc}`, onclick: (ev) => poista(d, ev.currentTarget) }, "×")))),
-    lomakeAuki && kirjauslomake(b, u));
+  );
 }
 
 function uniikit(b) {
@@ -406,8 +419,8 @@ function nayta(istunto) {
   clearInterval(ajastin);
   if (istunto) {
     lataa();
-    // Pidä sivu ajan tasalla pelatessa, mutta älä sotke auki olevaa kirjauslomaketta.
-    ajastin = setInterval(() => document.visibilityState === "visible" && !lomakeAuki && lataa(), 5 * 60_000);
+    // Pidä sivu ajan tasalla pelatessa, mutta älä päivitä, kun kirjausikkuna on auki.
+    ajastin = setInterval(() => document.visibilityState === "visible" && !kirjausAuki() && lataa(), 5 * 60_000);
   }
 }
 

@@ -65,6 +65,37 @@
   color-scheme: dark;
 }
 
+/* Bootstrapin värit omasta paletista: Bootstrap lukee nämä CSS-muuttujat, joten modaali,
+   toast ja lomakekentät saavat saman ruskean/kultaisen ilmeen kuin muu sivu. */
+:root, [data-bs-theme] {
+  --bs-body-bg: var(--tausta);
+  --bs-body-color: var(--teksti);
+  --bs-secondary-color: var(--hiljainen);
+  --bs-border-color: var(--reuna);
+  --bs-link-color-rgb: 154, 116, 36;
+  --bs-body-font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+/* btn-warning ja btn-outline-warning kultaisiksi: Bootstrapin napit muokataan --bs-btn-*-muuttujilla. */
+.btn-warning {
+  --bs-btn-bg: var(--kulta); --bs-btn-border-color: var(--kulta); --bs-btn-color: var(--tausta);
+  --bs-btn-hover-bg: var(--kulta); --bs-btn-hover-border-color: var(--kulta); --bs-btn-hover-color: var(--tausta);
+  --bs-btn-active-bg: var(--kulta); --bs-btn-active-color: var(--tausta);
+  --bs-btn-disabled-bg: var(--kulta); --bs-btn-disabled-border-color: var(--kulta); --bs-btn-disabled-color: var(--tausta);
+  font-weight: 600;
+}
+.btn-outline-warning {
+  --bs-btn-color: var(--kulta); --bs-btn-bg: var(--kulta-tausta);
+  --bs-btn-border-color: color-mix(in srgb, var(--kulta) 35%, transparent);
+  --bs-btn-hover-bg: var(--kulta); --bs-btn-hover-border-color: var(--kulta); --bs-btn-hover-color: var(--tausta);
+  --bs-btn-active-bg: var(--kulta); --bs-btn-active-color: var(--tausta);
+  font-weight: 600;
+}
+.btn-link { --bs-btn-color: var(--hiljainen); --bs-btn-hover-color: var(--teksti); text-decoration: none; font-weight: 600; }
+.modal-content, .toast { --bs-modal-bg: var(--pinta); --bs-toast-bg: var(--teksti); --bs-toast-color: var(--tausta); }
+.toast .btn-close { filter: invert(1) grayscale(1); }
+[data-bs-theme="dark"] .toast .btn-close { filter: none; }
+.kirjaus-kuva { width: 32px; height: 32px; object-fit: contain; image-rendering: pixelated; margin-right: 10px; }
+
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 
@@ -103,8 +134,6 @@ button {
 button:hover { filter: brightness(1.08); }
 button:disabled { opacity: 0.55; cursor: progress; }
 button:focus-visible, input:focus-visible { outline: 2px solid var(--kulta); outline-offset: 2px; }
-button.toissijainen { background: var(--kulta-tausta); color: var(--kulta); border-color: color-mix(in srgb, var(--kulta) 35%, transparent); }
-button.haamu { background: transparent; color: var(--hiljainen); }
 
 .kortti {
   background: var(--pinta);
@@ -117,10 +146,6 @@ button.haamu { background: transparent; color: var(--hiljainen); }
 .kirjautuminen { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
 .kirjaudu { width: min(360px, 100%); padding: 28px; display: grid; gap: 14px; }
 .kirjaudu label { display: grid; gap: 6px; font-size: 0.875rem; color: var(--hiljainen); }
-.kirjaudu input {
-  font: inherit; padding: 10px 12px; border-radius: 8px;
-  border: 1px solid var(--reuna); background: var(--pinta-2); color: var(--teksti);
-}
 
 /* Yläpalkki */
 .ylapalkki { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -271,7 +296,6 @@ button.haamu { background: transparent; color: var(--hiljainen); }
 .kuiva { font-size: 0.8rem; color: var(--vihrea); font-variant-numeric: tabular-nums; }
 .kuiva.raja { color: var(--kulta); }
 .kuiva.yli { color: var(--punainen); }
-button.pieni { padding: 3px 10px; font-size: 0.8rem; }
 .saadut { display: flex; gap: 4px; flex-wrap: wrap; }
 .saatu-kc {
   display: inline-flex; align-items: center; gap: 2px; font-size: 0.75rem; font-weight: 600;
@@ -279,13 +303,6 @@ button.pieni { padding: 3px 10px; font-size: 0.8rem; }
   font-variant-numeric: tabular-nums;
 }
 button.poista { background: transparent; color: inherit; padding: 0 6px; font-size: 0.85rem; line-height: 1.2; border-radius: 99px; }
-.kirjaus { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.kirjaus label { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--hiljainen); }
-.kirjaus input {
-  font: inherit; width: 7em; padding: 5px 8px; border-radius: 8px;
-  border: 1px solid var(--reuna); background: var(--pinta); color: var(--teksti);
-}
-.kirjaus button { padding: 5px 12px; font-size: 0.85rem; }
 
 .lootti { display: grid; gap: 6px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--reuna); }
 .lootti-luvut { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
@@ -301,11 +318,6 @@ button.poista { background: transparent; color: inherit; padding: 0 6px; font-si
 .lahteet { margin-top: 32px; display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.8rem; color: var(--hiljainen); }
 .lahteet .virhe { font-size: 0.8rem; }
 
-.ilmoitus {
-  position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
-  background: var(--teksti); color: var(--tausta); padding: 10px 16px; border-radius: 10px;
-  font-size: 0.9rem; max-width: calc(100% - 32px); box-shadow: 0 6px 24px rgb(0 0 0 / 0.25);
-}
 
 .tyhja { padding: 14px; color: var(--hiljainen); font-size: 0.9rem; }
 
