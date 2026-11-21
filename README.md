@@ -125,17 +125,21 @@ TODO: kuvakaappaukset (etusivu, bossinäkymä ja KC-käyrä, puhelinnäkymä)
 
 ### Itsearviointi ja oppimispohdinta
 
-TODO: kirjoitan omin sanoin
+**Mikä onnistui?** Ulkoasu ja bossinäkymä onnistuivat parhaiten. Bossien omat kortit ovat hienoja:
+kun hiiren vie niiden päälle, ne nousevat hieman ja saavat bossin värisen hohteen, joka nostaa ne
+esiin hienosti mutta ei liian korostavasti. Sovellus on ylipäätään tehty sillä ajatuksella, että se tuo peliin lisämotivaatiota ja
+sillä voi seurata esimerkiksi lootin tuomaa rahaa, jota pelissä ei näe heti.
 
-**Mikä onnistui?**
+**Mikä oli haastavaa?** jQueryn delegoidut kuuntelijat ja animaatiojono olivat vaikeita ymmärtää.
 
-**Mikä oli haastavaa?**
+**Mitä parantaisin?** Lisäisin GP-käyrän lootista ja bossien järjestyksen valinnan. Lisäisin varmaan
+myös mahdollisuuden asettaa, kuinka monta tappoa bosseista haluaa tehdä, sekä laajemman
+bossikirjaston, josta voi koota uuden tavoitesivun.
 
-**Mitä parantaisin?**
+**Mitä opin?** Opin sen, että valmiina olevan sovelluksen voi muuttaa toisenlaiseksi muita
+tekniikoita hyödyntämällä, eikä tarvitse lähteä tekemään uutta alusta.
 
-**Mitä opin?**
-
-**Itsearvioitu arvosana: xx/10.**
+**Itsearvioitu arvosana: 8/10.** Kaikki vaatimukset täyttyvät ja vähän ylikin.
 
 ### Lähteet ja tekoälyn käyttö
 
@@ -158,7 +162,8 @@ TODO: kirjoitan omin sanoin
     Projekti 3:n muutokset. Projekti 3 tehtiin seitsemässä osassa (yksi commit per osa), ja Claude
     selitti jokaisen osan ennen seuraavaa. Lisäksi Claude teki jQuery-oppimateriaalin esimerkeillä
     omasta koodistani, testasi muutokset selaimessa testidatalla ja kirjoitti tämän README:n rungon.
-    Itsearvioinnin kirjoitan itse.
+    Itsearvioinnin vastaukset ovat omiani: Claude esitti kysymykset, korjasi kirjoitusvirheet ja
+    jäsenteli vastaukset.
 
 ---
 
