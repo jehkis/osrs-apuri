@@ -77,6 +77,15 @@
     <footer class="lahteet" id="lahteet"></footer>
   </div>
 
+  <!-- Juhlabanneri: liukuu ylhäältä esiin, kun uusi uniikki tai virstanpylväs tulee (jQuery slideDown/slideUp). -->
+  <div id="juhla" class="juhla" role="status" aria-live="polite" style="display: none">
+    <img class="juhla-kuva" src="" alt="">
+    <div>
+      <div class="juhla-otsikko"></div>
+      <div class="juhla-teksti"></div>
+    </div>
+  </div>
+
   <!-- Bootstrapin modaali-ikkuna dropin kirjaukseen. app.js täyttää esineen tiedot ennen avaamista. -->
   <div class="modal fade" id="kirjaus" tabindex="-1" aria-labelledby="kirjaus-otsikko" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-sm">

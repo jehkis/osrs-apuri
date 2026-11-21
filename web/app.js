@@ -274,7 +274,8 @@ function bossiOtsikko(b, wikiin) {
     el("div", { class: "bossi-nimi" },
       el("h3", {}, wikiin ? el("a", { class: "linkki", href: WIKI + b.wiki, target: "_blank", rel: "noopener" }, b.nimi) : b.nimi),
       el("p", { class: "hiljainen" }, b.lempinimi)),
-    el("div", { class: "kc" }, luku(b.kc), el("small", {}, ` / ${luku(TAVOITE)}`)));
+    // kc-luku omassa spanissaan, jotta juhlinnan laskuri voi animoida pelkän luvun.
+    el("div", { class: "kc" }, el("span", { class: "kc-luku", "data-bossi": b.id }, luku(b.kc)), el("small", {}, ` / ${luku(TAVOITE)}`)));
 }
 
 // Seuraava virstanpylväs ja tahti yhdellä rivillä.
@@ -581,8 +582,115 @@ function piirraLahteet(w) {
   ].filter(Boolean));
 }
 
+// ---------------------------------------------------------------- juhlinta (jQuery-efektit)
+
+// Mitä käyttäjä on jo nähnyt: KC, saavutetut virstanpylväät ja saatujen uniikkien määrät.
+// Tallennetaan selaimen localStorageen, jotta juhlinta tulee myös silloin, kun Dink kirjasi
+// dropin sivun ollessa kiinni. localStorage voi olla estetty (yksityinen ikkuna), joten try/catch.
+const NAHTY = "osrs-apuri:nahty";
+
+function tiivista(t) {
+  return Object.fromEntries(t.bossit.map((b) => [b.id, {
+    kc: b.kc,
+    virstat: b.virstanpylvaat.saavutetut,
+    uniikit: Object.fromEntries(b.uniikit.map((u) => [u.nimi, u.saadut.length])),
+  }]));
+}
+
+function lueNahty() {
+  try {
+    return JSON.parse(localStorage.getItem(NAHTY));
+  } catch {
+    return null;
+  }
+}
+
+function tallennaNahty(t) {
+  try {
+    localStorage.setItem(NAHTY, JSON.stringify(tiivista(t)));
+  } catch {
+    // ei tallennusta, juhlinta toimii silti saman käynnin aikana
+  }
+}
+
+// Vertaa vanhaa ja uutta tilannetta: uudet uniikit ja uudet virstanpylväät.
+function uudetSaavutukset(vanha, t) {
+  if (!vanha) return []; // ensimmäinen käynti: ei juhlita koko historiaa
+  const lista = [];
+  for (const b of t.bossit) {
+    const v = vanha[b.id];
+    if (!v) continue;
+    for (const u of b.uniikit) {
+      if (u.saadut.length > (v.uniikit[u.nimi] ?? 0)) {
+        const kc = Math.max(...u.saadut.map((d) => d.kc));
+        lista.push({ b, kuva: esineKuva(u.kuva), otsikko: u.pet ? "Uusi pet!" : "Uusi uniikki!", teksti: `${u.nimi} · ${b.lempinimi} KC ${luku(kc)}` });
+      }
+    }
+    for (const m of b.virstanpylvaat.saavutetut) {
+      if (!v.virstat.includes(m)) {
+        lista.push({ b, kuva: bossiKuva(b.kuva), otsikko: "Virstanpylväs!", teksti: `${b.nimi} ${luku(m)} KC` });
+      }
+    }
+  }
+  return lista;
+}
+
+// Näyttää saavutukset yksi kerrallaan. jQueryn animaatiojono hoitaa järjestyksen:
+// queue() lisää jonoon oman vaiheen (sisällön vaihto), slideDown/delay/slideUp odottavat vuoroaan.
+function juhli(saavutukset) {
+  const $juhla = $("#juhla");
+  for (const s of saavutukset) {
+    $juhla
+      .queue(function (seuraava) {
+        $(this).find(".juhla-kuva").attr("src", s.kuva);
+        $(this).find(".juhla-otsikko").text(s.otsikko);
+        $(this).find(".juhla-teksti").text(s.teksti);
+        hehku($(`.bossi.b-${s.b.id}`));
+        seuraava(); // jatka jonon seuraavaan vaiheeseen
+      })
+      .slideDown(300)
+      .delay(3500)
+      .slideUp(300);
+  }
+}
+
+// Kultainen hehku kortin ympärille. jQueryn animate() osaa animoida vain numeroita, joten
+// animoidaan lukua 0 → 1 ja step-funktio muuttaa sen joka kuvassa box-shadow-tyyliksi.
+function hehku($kortti) {
+  if (!$kortti.length) return;
+  const kulta = getComputedStyle(document.documentElement).getPropertyValue("--kulta").trim();
+  $({ t: 0 }).animate({ t: 1 }, {
+    duration: 2000,
+    easing: "linear",
+    step: (t) => {
+      const voima = Math.abs(Math.sin(t * Math.PI * 3)) * (1 - t * 0.6); // kolme sykäystä, hiipuu
+      $kortti.css("box-shadow", `0 0 ${Math.round(28 * voima)}px ${Math.round(6 * voima)}px ${kulta}`);
+    },
+    complete: () => $kortti.css("box-shadow", ""),
+  });
+}
+
+// KC-luku laskee vanhasta uuteen (esim. 140 → 145) samalla animate()-tekniikalla.
+function laskeKc(vanha, t) {
+  if (!vanha) return;
+  for (const b of t.bossit) {
+    const alku = vanha[b.id]?.kc;
+    if (alku === undefined || alku >= b.kc) continue;
+    const $luvut = $(`.kc-luku[data-bossi="${b.id}"]`);
+    $({ n: alku }).animate({ n: b.kc }, {
+      duration: 1200,
+      step: (n) => $luvut.text(luku(Math.round(n))),
+      complete: () => $luvut.text(luku(b.kc)),
+    });
+  }
+}
+
+// ---------------------------------------------------------------- piirto ja lataus
+
 let viimeisin = null;
 function piirra(t) {
+  // Vanha tilanne vertailuun: tämän käynnin edellinen data tai localStoragen viimeksi nähty.
+  const vanha = viimeisin ? tiivista(viimeisin) : lueNahty();
   viimeisin = t;
   piirraLuvut(t.yhteenveto);
   piirraOsat(t.bossit);
@@ -591,6 +699,9 @@ function piirra(t) {
   piirraDropit(t.viimeisimmat, t.bossit);
   piirraLahteet(t.wom);
   piirraNakyma(false);
+  laskeKc(vanha, t);
+  juhli(uudetSaavutukset(vanha, t));
+  tallennaNahty(t);
 }
 
 async function lataa() {

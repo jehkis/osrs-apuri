@@ -379,3 +379,16 @@ button.poista { background: transparent; color: inherit; padding: 0 6px; font-si
 /* Grid-solu ei oletuksena kutistu sisältöään kapeammaksi (min-width: auto), jolloin canvas
    venyttäisi kortin yli puhelimen reunan. minmax(0, 1fr) sallii kutistumisen. */
 .bossi { grid-template-columns: minmax(0, 1fr); }
+
+/* Juhlabanneri yläreunassa. jQuery näyttää sen slideDownilla, joten se piilotetaan
+   inline-tyylillä (display: none), ei hidden-attribuutilla. */
+.juhla {
+  position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 1100;
+  display: flex; align-items: center; gap: 12px; width: min(420px, calc(100% - 32px));
+  padding: 12px 16px; border-radius: var(--sade);
+  background: linear-gradient(135deg, var(--kulta-tausta), var(--pinta));
+  border: 2px solid var(--kulta); box-shadow: 0 8px 30px rgb(0 0 0 / 0.25);
+}
+.juhla-kuva { width: 40px; height: 40px; object-fit: contain; image-rendering: pixelated; flex: none; }
+.juhla-otsikko { font-weight: 700; color: var(--kulta); text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.8rem; }
+.juhla-teksti { font-weight: 600; }
