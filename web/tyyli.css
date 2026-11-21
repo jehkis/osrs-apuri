@@ -393,6 +393,7 @@ button.poista { background: transparent; color: inherit; padding: 0 6px; font-si
 .juhla-otsikko { font-weight: 700; color: var(--kulta); text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.8rem; }
 .juhla-teksti { font-weight: 600; }
 
-/* Lukutila (opettajan tunnus): muokkausnapit piiloon. Palvelin estää muokkaukset joka tapauksessa. */
-.lukija .kirjaa, .lukija .poista { display: none !important; }
+/* Lukutila (opettajan tunnus): poistonappi piiloon. "Sain" näkyy, mutta se on demo (ei tallennu).
+   Palvelin estää muokkaukset joka tapauksessa. */
+.lukija .poista { display: none !important; }
 #lukutila { vertical-align: middle; font-size: 0.65rem; margin-left: 4px; }

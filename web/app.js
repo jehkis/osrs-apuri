@@ -175,6 +175,23 @@ function valitse(avain) {
 
 // ---------------------------------------------------------------- kirjaus (Bootstrap-modaali)
 
+// Lukija = kirjautunut muulla kuin omistajan tunnuksella (body-luokka asetetaan nayta()-funktiossa).
+const onLukija = () => $("body").hasClass("lukija");
+
+// Demokirjaus lukijalle: lisätään drop vain selaimessa olevaan kopioon datasta ja piirretään
+// sivu uudelleen, jolloin juhlinta käynnistyy kuten oikeasta dropista. Palvelimelle ei lähetetä
+// mitään, ja seuraava päivitys palvelimelta korvaa kopion oikealla datalla.
+function demoKirjaus(b, u, kc) {
+  const kopio = structuredClone(viimeisin); // syvä kopio: oikea data ei muutu
+  const kb = kopio.bossit.find((x) => x.id === b.id);
+  const ku = kb.uniikit.find((x) => x.nimi === u.nimi);
+  const aika = new Date().toISOString();
+  ku.saadut = [...ku.saadut, { id: `demo-${Date.now()}`, kc, aika }];
+  kopio.yhteenveto.uniikkejaSaatu = kopio.bossit.flatMap((x) => x.uniikit).filter((x) => x.saadut.length).length;
+  kopio.viimeisimmat = [{ bossi: b.id, esine: u.nimi, kc, aika, bossiNimi: b.nimi }, ...kopio.viimeisimmat];
+  piirra(kopio);
+}
+
 // Mitä ollaan kirjaamassa: { b: bossi, u: uniikki }. Asetetaan, kun modaali avataan.
 let kirjattava = null;
 const kirjausIkkuna = () => bootstrap.Modal.getOrCreateInstance($("#kirjaus")[0]);
@@ -186,7 +203,12 @@ function avaaKirjaus(b, u) {
   $("#kirjaus-otsikko").text(u.nimi);
   $("#kirjaus-kuva").attr("src", esineKuva(u.kuva));
   $("#kirjaus-kc").val(b.kc);
-  $("#kirjaus-ohje").text(`${b.nimi}, nykyinen KC ${luku(b.kc)}`);
+  // Lukutilassa (opettaja) kirjaus on demo: se näytetään, mutta sitä ei tallenneta.
+  const demo = onLukija();
+  $("#kirjaus-ohje").text(demo
+    ? "Demotila: näet juhlinnan, mutta kirjausta ei tallenneta. Se katoaa seuraavassa päivityksessä."
+    : `${b.nimi}, nykyinen KC ${luku(b.kc)}`);
+  $("#kirjaus-lomake button[type=submit]").text(demo ? "Kokeile" : "Tallenna");
   kirjausIkkuna().show();
 }
 
@@ -199,6 +221,12 @@ $("#kirjaus-lomake").on("submit", async function (ev) {
   const { b, u } = kirjattava;
   const kc = Number($("#kirjaus-kc").val());
   if (!Number.isInteger(kc) || kc < 0) return ilmoita("KC:n pitää olla kokonaisluku.");
+  if (onLukija()) {
+    kirjausIkkuna().hide();
+    demoKirjaus(b, u, kc);
+    ilmoita(`Demo: ${u.nimi} KC:lla ${kc}. Kirjausta ei tallennettu.`);
+    return;
+  }
   const $nappi = $(this).find("button[type=submit]").prop("disabled", true);
   try {
     piirra(await kutsu("/droppi", { method: "POST", body: JSON.stringify({ bossi: b.id, esine: u.nimi, kc }) }));
@@ -509,7 +537,6 @@ $("#bossinakyma").on("click", ".ruutu", function () {
 
 // "Sain" / "+1" avaa kirjausmodaalin.
 $("#bossinakyma").on("click", ".kirjaa", function () {
-  if ($("body").hasClass("lukija")) return;
   const { b, u } = etsiUniikki(String($(this).data("avain")));
   if (b && u) avaaKirjaus(b, u);
 });
@@ -763,8 +790,8 @@ function nayta(istunto) {
   // prop("hidden", ...) asettaa HTML:n hidden-ominaisuuden: kirjautuminen tai sovellus näkyviin.
   $("#kirjautuminen").prop("hidden", !!istunto);
   $("#sovellus").prop("hidden", !istunto);
-  // Lukutila: muut kuin omistaja (esim. opettaja) eivät näe muokkausnappeja. Varsinainen esto on
-  // palvelimella (api palauttaa 403), tämä vain piilottaa napit, joita ei voisi käyttää.
+  // Lukutila: muut kuin omistaja (esim. opettaja). Poistonappi piilotetaan ja "Sain" on demo.
+  // Varsinainen esto on palvelimella (api palauttaa 403 kirjoitusyrityksestä).
   const lukija = !!istunto && istunto.user?.email?.toLowerCase() !== TUNNUS.toLowerCase();
   $("body").toggleClass("lukija", lukija);
   $("#lukutila").prop("hidden", !lukija);
