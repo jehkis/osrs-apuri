@@ -5,7 +5,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_AVAIN);
 const API = `${SUPABASE_URL}/functions/v1/api`;
 const WIKI = "https://oldschool.runescape.wiki/w/";
 const TAVOITE = 3000;
-const $ = (id) => document.getElementById(id);
+// $ on jQuery (ladataan index.html:ssä). Valitsimet ovat CSS-valitsimia: "#id", ".luokka".
 
 // ---------------------------------------------------------------- apurit
 
@@ -52,13 +52,10 @@ function el(tag, attrs = {}, ...lapset) {
 const palkki = (osuus, luokka = "") =>
   el("div", { class: `palkki ${luokka}` }, el("span", { style: `width:${Math.min(100, Math.max(0, osuus * 100))}%` }));
 
-let ilmoitusAjastin;
+// Ilmoitus häivytetään esiin ja pois jQueryn efekteillä. stop(true) keskeyttää edellisen
+// ilmoituksen animaation, jotta uusi ilmoitus ei jää jonoon. delay korvaa setTimeoutin.
 function ilmoita(teksti) {
-  const i = $("ilmoitus");
-  i.textContent = teksti;
-  i.hidden = false;
-  clearTimeout(ilmoitusAjastin);
-  ilmoitusAjastin = setTimeout(() => (i.hidden = true), 4000);
+  $("#ilmoitus").stop(true, true).text(teksti).fadeIn(200).delay(4000).fadeOut(400);
 }
 
 // ---------------------------------------------------------------- rajapinta
@@ -88,7 +85,8 @@ function lukukortti(nimi, arvo, lisa, luokka = "") {
 }
 
 function piirraLuvut(y) {
-  $("luvut").replaceChildren(
+  // empty() tyhjentää vanhan sisällön, append() lisää uudet elementit.
+  $("#luvut").empty().append(
     lukukortti("Yhteensä", [luku(y.kc), el("small", {}, `/ ${luku(y.tavoite)}`)],
       `${prosentti(y.osuus)} · projektissa +${luku(y.projektissa)}`, "korostus"),
     lukukortti("Tahti", y.viikossa === null ? "–" : [luku(y.viikossa, y.viikossa < 10 ? 1 : 0), el("small", {}, "KC/vko")],
@@ -111,7 +109,7 @@ function tarkkaProsentti(osuus) {
 function piirraKassa(k, bossit) {
   const tuuri = k.tuuri === null ? null : k.tuuri - 1;
   const varit = new Map(bossit.map((b) => [b.id, b.lempinimi]));
-  $("kassa").replaceChildren(
+  $("#kassa").empty().append(
     el("div", { class: "kolikot", role: "img", "aria-label": `Kassa ${tarkkaProsentti(k.osuus)} täynnä`, style: `--taytto:${k.osuus * 100}%` },
       el("img", { class: "kolikot-pohja", src: KOLIKOT, alt: "" }),
       el("div", { class: "kolikot-taytto" }, el("img", { src: KOLIKOT, alt: "" })),
@@ -281,7 +279,7 @@ function bossikortti(b) {
 
 // Viiden osan palkki: jokainen bossi on viidennes, täyttö on sen oma osuus 3000:sta.
 function piirraOsat(bossit) {
-  $("osat").replaceChildren(
+  $("#osat").empty().append(
     el("div", { class: "osapalkki", role: "img", "aria-label": bossit.map((b) => `${b.lempinimi} ${prosentti(b.osuus)}`).join(", ") },
       bossit.map((b) => el("a", { class: `osa b-${b.id}`, href: `#bossi-${b.id}`, title: `${b.nimi}: ${luku(b.kc)} / ${luku(TAVOITE)}` },
         el("span", { class: "osa-taytto", style: `width:${Math.max(b.osuus > 0 ? 1.5 : 0, b.osuus * 100)}%` })))),
@@ -313,8 +311,10 @@ function lootti(b) {
 
 function piirraDropit(lista, bossit) {
   const kuvat = new Map(bossit.flatMap((b) => b.uniikit.map((u) => [`${b.id}|${u.nimi}`, u.kuva])));
-  $("dropit-osio").hidden = lista.length === 0;
-  $("dropit").replaceChildren(...lista.map((d) => el("li", { class: "kortti" },
+  // prop("hidden", true/false) piilottaa tai näyttää osion. (toggle() ei toimisi, koska
+  // tyyli.css:n [hidden]-sääntö on !important ja voittaa jQueryn asettaman display-tyylin.)
+  $("#dropit-osio").prop("hidden", lista.length === 0);
+  $("#dropit").empty().append(lista.map((d) => el("li", { class: "kortti" },
     el("span", { class: "droppi-nimi" },
       kuvat.has(`${d.bossi}|${d.esine}`) && el("img", { src: esineKuva(kuvat.get(`${d.bossi}|${d.esine}`)), alt: "" }),
       el("strong", {}, d.esine), ` · ${d.bossiNimi}`),
@@ -322,7 +322,7 @@ function piirraDropit(lista, bossit) {
 }
 
 function piirraLahteet(w) {
-  $("lahteet").replaceChildren(...[
+  $("#lahteet").empty().append([
     el("span", {}, `WOM päivitetty ${sitten(w.paivitetty)}`),
     w.virhe && el("span", { class: "virhe" }, `Viimeisin virhe: ${w.virhe}`),
     el("span", {}, "WOM tunnin välein, Dink heti tapon jälkeen. Kuvat: OSRS Wiki."),
@@ -335,7 +335,7 @@ function piirra(t) {
   piirraLuvut(t.yhteenveto);
   piirraOsat(t.bossit);
   piirraKassa(t.kassa, t.bossit);
-  $("bossit").replaceChildren(...t.bossit.map(bossikortti));
+  $("#bossit").empty().append(t.bossit.map(bossikortti));
   piirraDropit(t.viimeisimmat, t.bossit);
   piirraLahteet(t.wom);
 }
@@ -350,10 +350,11 @@ async function lataa() {
 
 // ---------------------------------------------------------------- tapahtumat
 
-$("paivita").addEventListener("click", async (ev) => {
-  const nappi = ev.currentTarget;
-  nappi.disabled = true;
-  nappi.textContent = "Päivitetään…";
+// .on("click", ...) liittää kuuntelijan. Tavallinen function (ei nuolifunktio), jotta
+// this on klikattu nappi. $-alkuinen muuttujanimi kertoo, että se on jQuery-olio.
+$("#paivita").on("click", async function () {
+  const $nappi = $(this);
+  $nappi.prop("disabled", true).text("Päivitetään…");
   try {
     const r = await kutsu("/paivita", { method: "POST" });
     piirra(r.tilanne);
@@ -361,35 +362,36 @@ $("paivita").addEventListener("click", async (ev) => {
   } catch (e) {
     ilmoita(`Päivitys epäonnistui: ${e.message}`);
   } finally {
-    nappi.disabled = false;
-    nappi.textContent = "Päivitä nyt";
+    $nappi.prop("disabled", false).text("Päivitä nyt");
   }
 });
 
-$("kirjaudu").addEventListener("submit", async (ev) => {
-  ev.preventDefault();
-  const nappi = ev.submitter;
-  nappi.disabled = true;
-  $("kirjautumisvirhe").textContent = "";
-  const { data, error } = await supabase.auth.signInWithPassword({ email: TUNNUS, password: $("salasana").value });
-  nappi.disabled = false;
+$("#kirjaudu").on("submit", async function (ev) {
+  ev.preventDefault(); // estää selainta lähettämästä lomaketta ja lataamasta sivua uudelleen
+  const $nappi = $(this).find("button[type=submit]");
+  $nappi.prop("disabled", true);
+  $("#kirjautumisvirhe").text("");
+  // .val() lukee kentän arvon, .val("") tyhjentää sen.
+  const { data, error } = await supabase.auth.signInWithPassword({ email: TUNNUS, password: $("#salasana").val() });
+  $nappi.prop("disabled", false);
   if (error) {
-    $("kirjautumisvirhe").textContent = "Väärä salasana.";
+    $("#kirjautumisvirhe").text("Väärä salasana.");
     return;
   }
-  $("salasana").value = "";
+  $("#salasana").val("");
   nayta(data.session);
 });
 
-$("ulos").addEventListener("click", async () => {
+$("#ulos").on("click", async () => {
   await supabase.auth.signOut();
   nayta(null);
 });
 
 let ajastin;
 function nayta(istunto) {
-  $("kirjautuminen").hidden = !!istunto;
-  $("sovellus").hidden = !istunto;
+  // prop("hidden", ...) asettaa HTML:n hidden-ominaisuuden: kirjautuminen tai sovellus näkyviin.
+  $("#kirjautuminen").prop("hidden", !!istunto);
+  $("#sovellus").prop("hidden", !istunto);
   clearInterval(ajastin);
   if (istunto) {
     lataa();
@@ -398,6 +400,6 @@ function nayta(istunto) {
   }
 }
 
-document.querySelector('input[name="username"]').value = TUNNUS;
+$('input[name="username"]').val(TUNNUS);
 const { data } = await supabase.auth.getSession();
 nayta(data.session);
