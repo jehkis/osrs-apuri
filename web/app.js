@@ -509,6 +509,7 @@ $("#bossinakyma").on("click", ".ruutu", function () {
 
 // "Sain" / "+1" avaa kirjausmodaalin.
 $("#bossinakyma").on("click", ".kirjaa", function () {
+  if ($("body").hasClass("lukija")) return;
   const { b, u } = etsiUniikki(String($(this).data("avain")));
   if (b && u) avaaKirjaus(b, u);
 });
@@ -735,14 +736,20 @@ $("#kirjaudu").on("submit", async function (ev) {
   const $nappi = $(this).find("button[type=submit]");
   $nappi.prop("disabled", true);
   $("#kirjautumisvirhe").text("");
-  // .val() lukee kentän arvon, .val("") tyhjentää sen.
-  const { data, error } = await supabase.auth.signInWithPassword({ email: TUNNUS, password: $("#salasana").val() });
+  // .val() lukee kentän arvon. Tyhjä sähköposti = omistajan tunnus. trim() poistaa välilyönnit.
+  const email = $("#sahkoposti").val().trim() || TUNNUS;
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password: $("#salasana").val() });
   $nappi.prop("disabled", false);
   if (error) {
-    $("#kirjautumisvirhe").text("Väärä salasana.");
+    $("#kirjautumisvirhe").text("Väärä sähköposti tai salasana.");
     return;
   }
   $("#salasana").val("");
+  try {
+    localStorage.setItem("osrs-apuri:email", email === TUNNUS ? "" : email); // muistetaan seuraavalla kerralla
+  } catch {
+    // ei muistamista, ei haittaa
+  }
   nayta(data.session);
 });
 
@@ -756,6 +763,11 @@ function nayta(istunto) {
   // prop("hidden", ...) asettaa HTML:n hidden-ominaisuuden: kirjautuminen tai sovellus näkyviin.
   $("#kirjautuminen").prop("hidden", !!istunto);
   $("#sovellus").prop("hidden", !istunto);
+  // Lukutila: muut kuin omistaja (esim. opettaja) eivät näe muokkausnappeja. Varsinainen esto on
+  // palvelimella (api palauttaa 403), tämä vain piilottaa napit, joita ei voisi käyttää.
+  const lukija = !!istunto && istunto.user?.email?.toLowerCase() !== TUNNUS.toLowerCase();
+  $("body").toggleClass("lukija", lukija);
+  $("#lukutila").prop("hidden", !lukija);
   clearInterval(ajastin);
   if (istunto) {
     lataa();
@@ -764,6 +776,10 @@ function nayta(istunto) {
   }
 }
 
-$('input[name="username"]').val(TUNNUS);
+try {
+  $("#sahkoposti").val(localStorage.getItem("osrs-apuri:email") ?? "");
+} catch {
+  // localStorage estetty: kenttä jää tyhjäksi
+}
 const { data } = await supabase.auth.getSession();
 nayta(data.session);

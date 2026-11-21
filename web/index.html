@@ -26,8 +26,12 @@
     <form id="kirjaudu" class="kortti kirjaudu">
       <h1>OSRS-bossiprojekti</h1>
       <p class="hiljainen">Viisi bossia, 3000 KC kullekin.</p>
-      <input type="email" name="username" autocomplete="username" hidden>
-      <!-- Bootstrapin lomakeluokat: form-label, form-control ja btn. -->
+      <!-- Bootstrapin lomakeluokat: form-label, form-control, form-text ja btn. -->
+      <div>
+        <label for="sahkoposti" class="form-label">Sähköposti</label>
+        <input id="sahkoposti" class="form-control" type="email" name="username" autocomplete="username">
+        <div class="form-text">Omistaja voi jättää tyhjäksi.</div>
+      </div>
       <div>
         <label for="salasana" class="form-label">Salasana</label>
         <input id="salasana" class="form-control" type="password" autocomplete="current-password" required>
@@ -43,7 +47,7 @@
         <span class="merkki" aria-hidden="true"></span>
         <div>
           <h1>Bossiprojekti 3000</h1>
-          <p class="hiljainen" id="tilinimi">zei_kill</p>
+          <p class="hiljainen" id="tilinimi">zei_kill <span id="lukutila" class="badge rounded-pill text-bg-secondary" hidden>Lukutila</span></p>
         </div>
       </div>
       <div class="toiminnot">

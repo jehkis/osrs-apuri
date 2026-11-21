@@ -1,5 +1,6 @@
 // Käyttöliittymän rajapinta. Vaatii kirjautuneen käyttäjän; rekisteröityminen on
-// suljettu, joten ainoa tunnus on omistajan.
+// suljettu, joten tunnukset luodaan Supabasen hallinnasta. Omistaja saa kaiken, muut
+// tunnukset (esim. opettaja) vain lukea: ks. _jaettu/oikeudet.ts.
 //
 //   GET    /api/tilanne                       etusivun kaikki tiedot
 //   POST   /api/paivita                       hae WOM nyt
@@ -8,6 +9,7 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { kirjaaDroppi, paivitaWom, poistaDroppi, tilanne } from "../_jaettu/palvelu.ts";
+import { OMISTAJA, onOmistaja, sallittu } from "../_jaettu/oikeudet.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -29,6 +31,10 @@ Deno.serve(async (req) => {
   if (!kayttaja?.user) return vastaa({ virhe: "kirjaudu sisään" }, 401);
 
   const reitti = new URL(req.url).pathname.replace(/^.*\/api/, "") || "/";
+  const omistaja = onOmistaja(kayttaja.user.email, Deno.env.get("OMISTAJA") ?? OMISTAJA);
+  if (!sallittu(req.method, reitti, omistaja)) {
+    return vastaa({ virhe: "tällä tunnuksella on vain lukuoikeus" }, 403);
+  }
   try {
     if (req.method === "GET" && reitti === "/tilanne") {
       return vastaa(await tilanne(db));
