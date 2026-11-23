@@ -111,7 +111,28 @@ Kirjastot ladataan CDN:stä (`web/index.html`), joten sovellus ei tarvitse build
 
 ### Kuvakaappaukset
 
-TODO: kuvakaappaukset (etusivu, bossinäkymä ja KC-käyrä, puhelinnäkymä)
+**Etusivu:** yhteenveto, bossien osuudet, kassa ja bossikortit.
+
+![Etusivu](docs/kuvat/etusivu.png)
+
+**Bossinäkymä:** uniikit collection log -ruudukkona ja valitun esineen dry-tilasto.
+
+![Bossinäkymä](docs/kuvat/bossinakyma.png)
+
+**KC-käyrä (Chart.js):** tappojen kehitys 28 päivän ajalta, katkoviivana seuraava virstanpylväs.
+
+![KC-käyrä](docs/kuvat/kc-kayra.png)
+
+**Lukutila (opettajan tunnus):** dropin kirjaus Bootstrapin modaalissa demona, jota ei tallenneta.
+
+![Lukutila ja demokirjaus](docs/kuvat/lukutila-demo.png)
+
+**Puhelin:**
+
+<p>
+  <img src="docs/kuvat/puhelin-etusivu.png" alt="Etusivu puhelimella" width="300">
+  <img src="docs/kuvat/puhelin-bossi.png" alt="Bossinäkymä ja KC-käyrä puhelimella" width="300">
+</p>
 
 ### Tunnetut ongelmat ja rajoitukset
 
