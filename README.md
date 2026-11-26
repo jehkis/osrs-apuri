@@ -16,6 +16,7 @@ juhlinta ja lukutila opettajaa varten. Projektin osuus on kuvattu kohdassa
 ## Linkit
 
 - **Julkaistu sovellus:** https://jehkis.github.io/osrs-apuri/ (vaatii kirjautumisen; opettajan tunnukset ovat Canvas-palautuksessa)
+- **Demo ilman kirjautumista:** https://jehkis.github.io/osrs-apuri-demo/ (sama käyttöliittymä esimerkkidatalla, lukutilassa; mitään ei tallenneta – [demon repositorio](https://github.com/jehkis/osrs-apuri-demo))
 - **GitHub-repositorio:** https://github.com/jehkis/osrs-apuri
 - **Esittelyvideo:** TODO: lisää videon linkki
 
